@@ -1,37 +1,6 @@
 // =======================
-// Configuración
-// =======================
-
-// Firebase SNP (guardar tickets)
-const FIREBASE_SNP_BASE_URL =
-  "https://snp-novogar-default-rtdb.asia-southeast1.firebasedatabase.app";
-
-// Productos (precios Novogar)
-const PRECIOS_BASE_URL =
-  "https://precios-novogar-default-rtdb.firebaseio.com/precios.json";
-
-// MailUp vía proxy.cors.sh
-const MAILUP_ENDPOINT =
-  "https://proxy.cors.sh/https://send.mailup.com/API/v2.0/messages/sendmessage";
-const MAILUP_API_KEY =
-  "live_36d58f4c13cb7d838833506e8f6450623bf2605859ac089fa008cfeddd29d8dd";
-
-// ⚠️ Exponer esto en frontend no es seguro, lo mantengo como en tu ejemplo
-const SMTP_USERNAME = "s154745_3";
-const SMTP_PASSWORD = "QbikuGyHqJ";
-
-// Destinatarios SNP
-const EMAIL_SNP = "snp@novogar.com.ar";
-const EMAIL_SNP_1 = "snp1@novogar.com.ar";
-
-// Apps Script → Google Sheets
-const APPSCRIPT_SHEET_ENDPOINT =
-  "https://script.google.com/macros/s/AKfycbwVpipEeGXe8rDrpy68NlgW1yq95OpVWNxlfyFVKzoYOj5obfoaCnDyyOS38VfykqUE/exec";
-
-// =======================
 // Fecha/hora Argentina
 // =======================
-
 function getArgentinaDateInfo() {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat("es-AR", {
@@ -198,10 +167,15 @@ function buildTicketEmailHtml(ticket, tipo) {
     fechaIso
   } = ticket;
 
-  const titulo =
+  const tituloBase =
     tipo === "gerente"
       ? "Copia de ticket a SNP"
       : `Nuevo ticket cargado por sucursal ${sucursal}`;
+
+  const titulo =
+    nroCliente && nroCliente.trim()
+      ? `${tituloBase} · Cliente N° ${nroCliente}`
+      : tituloBase;
 
   const leadText =
     tipo === "gerente"
@@ -238,7 +212,7 @@ function buildTicketEmailHtml(ticket, tipo) {
         .header {
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 10px;
           padding: 16px 18px;
           border-bottom: 1px solid #e2e8f0;
           background: linear-gradient(
@@ -246,11 +220,6 @@ function buildTicketEmailHtml(ticket, tipo) {
             #f9fafb,
             #e5f0ff
           );
-        }
-        .logo {
-          height: 40px;
-          width: auto;
-          border-radius: 10px;
         }
         .title-block h1 {
           margin: 0;
@@ -304,7 +273,7 @@ function buildTicketEmailHtml(ticket, tipo) {
           text-align: left;
         }
         .meta-table th {
-          width: 140px;
+          width: 160px;
           color: #64748b;
           font-weight: 500;
           padding-right: 8px;
@@ -353,11 +322,6 @@ function buildTicketEmailHtml(ticket, tipo) {
       <div class="root">
         <div class="card">
           <div class="header">
-            <img
-              src="https://i.postimg.cc/MpgSGZkv/Novogar-N.png"
-              class="logo"
-              alt="Novogar"
-            />
             <div class="title-block">
               <h1>SNP · Ticket de reclamo</h1>
               <p>${titulo}</p>
@@ -664,7 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const direccionInput = document.getElementById("direccion");
       const telefonoInput = document.getElementById("telefono");
       const nroClienteInput = document.getElementById("nroCliente");
-      const productoInput = document.getElementById("producto");
+      const productoInput2 = document.getElementById("producto");
       const fallaInput = document.getElementById("falla");
 
       try {
@@ -674,7 +638,7 @@ document.addEventListener("DOMContentLoaded", () => {
           !direccionInput.value.trim() ||
           !telefonoInput.value.trim() ||
           !nroClienteInput.value.trim() ||
-          !productoInput.value.trim() ||
+          !productoInput2.value.trim() ||
           !fallaInput.value.trim()
         ) {
           throw new Error("Completá todos los campos del formulario.");
@@ -698,7 +662,7 @@ document.addEventListener("DOMContentLoaded", () => {
           nroCliente: nroClienteInput.value.trim().toUpperCase(),
           direccion: direccionInput.value.trim().toUpperCase(),
           telefono: telefonoInput.value.trim(),
-          producto: productoInput.value.trim().toUpperCase(),
+          producto: productoInput2.value.trim().toUpperCase(),
           falla: fallaInput.value.trim(),
           createdAtIso: iso,
           createdAtDisplay: display,
@@ -740,6 +704,14 @@ document.addEventListener("DOMContentLoaded", () => {
           fechaIso: ticketData.createdAtIso
         };
 
+        // Armamos sujetos incluyendo nro de cliente si existe
+        const nroCliTag = ticketData.nroCliente
+          ? ` · Cliente N° ${ticketData.nroCliente}`
+          : "";
+
+        const subjectGerente = `Copia de ticket a SNP${nroCliTag}`;
+        const subjectSnp = `Nuevo ticket SNP · ${ticketData.sucursal}${nroCliTag}`;
+
         // 1) Gerente
         if (ticketData.sucursalGerenteEmail) {
           addOverlayStep(
@@ -752,7 +724,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const rGerente = await sendEmailSnp({
             toName: ticketData.sucursalGerenteNombre,
             toEmail: ticketData.sucursalGerenteEmail,
-            subject: "Copia de ticket a SNP",
+            subject: subjectGerente,
             htmlBody: htmlGerente
           });
           if (rGerente.ok) {
@@ -767,7 +739,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // 2) SNP principal
         const htmlSnp = buildTicketEmailHtml(commonEmailData, "snp");
-        const subjectSnp = `Tenés un nuevo ticket cargado por sucursal ${ticketData.sucursal}`;
 
         addOverlayStep(`Enviando notificación a ${EMAIL_SNP}…`);
         const rSnp = await sendEmailSnp({
@@ -817,3 +788,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+const FIREBASE_SNP_BASE_URL =
+  "https://snp-novogar-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+const PRECIOS_BASE_URL =
+  "https://precios-novogar-default-rtdb.firebaseio.com/precios.json";
+
+const MAILUP_ENDPOINT =
+  "https://proxy.cors.sh/https://send.mailup.com/API/v2.0/messages/sendmessage";
+const MAILUP_API_KEY =
+  "live_36d58f4c13cb7d838833506e8f6450623bf2605859ac089fa008cfeddd29d8dd";
+
+const SMTP_USERNAME = "s154745_3";
+const SMTP_PASSWORD = "QbikuGyHqJ";
+
+const EMAIL_SNP = "snp@novogar.com.ar";
+const EMAIL_SNP_1 = "snp1@novogar.com.ar";
+
+// Apps Script → Google Sheets
+const APPSCRIPT_SHEET_ENDPOINT =
+  "https://script.google.com/macros/s/AKfycbwVpipEeGXe8rDrpy68NlgW1yq95OpVWNxlfyFVKzoYOj5obfoaCnDyyOS38VfykqUE/exec";
