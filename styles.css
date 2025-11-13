@@ -396,7 +396,8 @@ body {
   box-shadow: 0 18px 38px rgba(15, 23, 42, 0.2);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;        /* spinner + título centrados */
+  text-align: center;
   gap: 6px;
   min-width: 260px;
   max-width: 360px;
@@ -426,6 +427,8 @@ body {
   color: var(--text-soft);
   max-height: 120px;
   overflow-y: auto;
+  align-self: stretch;    /* lista ocupa todo el ancho */
+  text-align: left;       /* texto de pasos alineado a la izquierda */
 }
 
 .overlay-steps li + li {
@@ -503,8 +506,13 @@ body {
 /* Responsive */
 
 @media (max-width: 768px) {
+  body {
+    align-items: flex-start;  
+  }
+
   .app-shell {
     padding: 14px;
+    margin-top: 40px;          
   }
 
   .window-body {

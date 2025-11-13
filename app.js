@@ -16,6 +16,7 @@ const MAILUP_ENDPOINT =
 const MAILUP_API_KEY =
   "live_36d58f4c13cb7d838833506e8f6450623bf2605859ac089fa008cfeddd29d8dd";
 
+// ⚠️ Exponer esto en frontend no es seguro, lo mantengo como en tu ejemplo
 const SMTP_USERNAME = "s154745_3";
 const SMTP_PASSWORD = "QbikuGyHqJ";
 
@@ -147,7 +148,7 @@ async function guardarTicketEnFirebase(ticketData) {
 // =======================
 
 async function registrarTicketEnSheet(ticketData) {
-  // Enviar como x-www-form-urlencoded (sin preflight CORS)
+  // Enviar como x-www-form-urlencoded + no-cors
   const payload = {
     sucursal: ticketData.sucursal,
     sucursalGerenteNombre: ticketData.sucursalGerenteNombre,
@@ -167,23 +168,15 @@ async function registrarTicketEnSheet(ticketData) {
     payload: JSON.stringify(payload)
   });
 
-  const res = await fetch(APPSCRIPT_SHEET_ENDPOINT, {
+  // mode: "no-cors" → el request se envía igual, pero no se puede leer el response
+  await fetch(APPSCRIPT_SHEET_ENDPOINT, {
     method: "POST",
-    body
+    body,
+    mode: "no-cors"
   });
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error("Error al registrar en Sheet: " + txt);
-  }
-
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    // puede venir texto puro
-  }
-  return json || {};
+  // No devolvemos JSON porque el response es opaco
+  return { ok: true };
 }
 
 // =======================
@@ -721,7 +714,10 @@ document.addEventListener("DOMContentLoaded", () => {
         addOverlayStep("Registrando ticket en Google Sheets…");
         try {
           await registrarTicketEnSheet(ticketData);
-          addOverlayStep("✔ Ticket registrado en Google Sheets.", "ok");
+          addOverlayStep(
+            "✔ Se envió el registro a Google Sheets.",
+            "ok"
+          );
         } catch (sheetError) {
           console.error(sheetError);
           addOverlayStep(
