@@ -547,6 +547,529 @@ function initSplash() {
 }
 
 // =======================
+// Historial de tickets
+// =======================
+
+let ticketsCache = null; // array completo ordenado por fecha asc con ticketNumber
+let allTicketsDesc = []; // vista ordenada desc para historial
+let filteredTickets = [];
+let currentHistoryPage = 1;
+const HISTORY_PAGE_SIZE = 6;
+
+async function fetchAllTickets() {
+  if (ticketsCache) return ticketsCache;
+
+  const url = `${FIREBASE_SNP_BASE_URL}/snp.json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("No se pudo cargar el historial de tickets.");
+
+  const data = await res.json().catch(() => null) || {};
+
+  const arr = Object.entries(data).map(([firebaseKey, value]) => ({
+    firebaseKey,
+    ...(value || {})
+  }));
+
+  // Orden ascendente por fecha para numerar
+  arr.sort((a, b) => {
+    const aTime = a.createdAtIso ? new Date(a.createdAtIso).getTime() : 0;
+    const bTime = b.createdAtIso ? new Date(b.createdAtIso).getTime() : 0;
+    if (aTime !== bTime) return aTime - bTime;
+    return (a.firebaseKey || "").localeCompare(b.firebaseKey || "");
+  });
+
+  arr.forEach((t, idx) => {
+    t.ticketNumber = idx + 1; // posición en Firebase → número de ticket
+  });
+
+  ticketsCache = arr;
+  return ticketsCache;
+}
+
+function setHistoryLoading(loading) {
+  const listEl = document.getElementById("history-list");
+  const emptyEl = document.getElementById("history-empty");
+  if (!listEl) return;
+
+  if (loading) {
+    if (emptyEl) emptyEl.classList.add("d-none");
+    listEl.innerHTML = `
+      <div class="text-muted small d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm"></div>
+        <span>Cargando historial de tickets…</span>
+      </div>
+    `;
+  }
+}
+
+async function loadAndRenderTickets(options = {}) {
+  const { forceReload = false } = options;
+  if (forceReload) {
+    ticketsCache = null;
+  }
+
+  const listEl = document.getElementById("history-list");
+  if (!listEl) return;
+
+  try {
+    setHistoryLoading(true);
+    const ticketsAsc = await fetchAllTickets();
+
+    // Para mostrar: ordenamos DESC por fecha (más nuevos primero)
+    allTicketsDesc = [...ticketsAsc].sort((a, b) => {
+      const aTime = a.createdAtIso ? new Date(a.createdAtIso).getTime() : 0;
+      const bTime = b.createdAtIso ? new Date(b.createdAtIso).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    applyHistoryFilters();
+  } catch (err) {
+    console.error("Error cargando historial:", err);
+    listEl.innerHTML =
+      '<div class="text-danger small">No se pudo cargar el historial de tickets.</div>';
+  }
+}
+
+function applyHistoryFilters() {
+  const searchInput = document.getElementById("history-search-input");
+  const term = (searchInput?.value || "").trim().toLowerCase();
+
+  if (!term) {
+    filteredTickets = [...allTicketsDesc];
+  } else {
+    filteredTickets = allTicketsDesc.filter((t) => {
+      const pieces = [
+        t.ticketNumber && `ticket ${String(t.ticketNumber).padStart(5, "0")}`,
+        t.firebaseKey,
+        t.sucursal,
+        t.sucursalGerenteNombre,
+        t.cliente,
+        t.nroCliente,
+        t.direccion,
+        t.telefono,
+        t.producto,
+        t.falla,
+        t.createdAtDisplay
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return pieces.includes(term);
+    });
+  }
+
+  currentHistoryPage = 1;
+  renderHistoryPage();
+}
+
+function renderHistoryPage() {
+  const listEl = document.getElementById("history-list");
+  const emptyEl = document.getElementById("history-empty");
+  const pageCurrentEl = document.getElementById("history-page-current");
+  const pageTotalEl = document.getElementById("history-page-total");
+  const prevBtn = document.getElementById("history-prev-btn");
+  const nextBtn = document.getElementById("history-next-btn");
+
+  if (!listEl) return;
+
+  if (!filteredTickets.length) {
+    listEl.innerHTML = "";
+    if (emptyEl) emptyEl.classList.remove("d-none");
+    if (pageCurrentEl) pageCurrentEl.textContent = "0";
+    if (pageTotalEl) pageTotalEl.textContent = "0";
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    return;
+  }
+
+  if (emptyEl) emptyEl.classList.add("d-none");
+
+  const totalPages =
+    Math.ceil(filteredTickets.length / HISTORY_PAGE_SIZE) || 1;
+
+  if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
+
+  const start = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const end = start + HISTORY_PAGE_SIZE;
+  const pageItems = filteredTickets.slice(start, end);
+
+  listEl.innerHTML = pageItems
+    .map((t) => {
+      const ticketNumberStr = String(t.ticketNumber || "").padStart(5, "0");
+      const createdAtDisplay = t.createdAtDisplay || "-";
+      const cliente = t.cliente || "-";
+      const sucursal = t.sucursal || "-";
+      const producto = t.producto || "-";
+      const fallaRes =
+        t.falla && t.falla.length > 120
+          ? `${t.falla.slice(0, 117)}…`
+          : t.falla || "";
+
+      return `
+        <article class="history-card" data-firebase-key="${t.firebaseKey}">
+          <header class="history-card-header">
+            <div class="history-card-title">
+              <span class="badge-ticket">Ticket #${ticketNumberStr}</span>
+              <h3>${cliente}</h3>
+            </div>
+            <button
+              type="button"
+              class="btn-icon"
+              data-action="reprint"
+              title="Reimprimir comprobante"
+            >
+              <i class="bi bi-printer-fill"></i>
+            </button>
+          </header>
+          <div class="history-card-body">
+            <div class="history-row">
+              <i class="bi bi-shop"></i>
+              <span>${sucursal}</span>
+            </div>
+            <div class="history-row">
+              <i class="bi bi-box-seam"></i>
+              <span>SKU: <strong>${producto}</strong></span>
+            </div>
+            <div class="history-row">
+              <i class="bi bi-calendar-event"></i>
+              <span>${createdAtDisplay}</span>
+            </div>
+            <div class="history-row history-row-falla">
+              <i class="bi bi-chat-left-text"></i>
+              <span>${fallaRes}</span>
+            </div>
+          </div>
+          <footer class="history-card-footer">
+            <button
+              type="button"
+              class="btn btn-xs btn-outline-primary-macos"
+              data-action="reprint"
+            >
+              <i class="bi bi-printer me-1"></i>
+              Reimprimir
+            </button>
+          </footer>
+        </article>
+      `;
+    })
+    .join("");
+
+  if (pageCurrentEl) pageCurrentEl.textContent = String(currentHistoryPage);
+  if (pageTotalEl) pageTotalEl.textContent = String(totalPages);
+  if (prevBtn) prevBtn.disabled = currentHistoryPage <= 1;
+  if (nextBtn) nextBtn.disabled = currentHistoryPage >= totalPages;
+}
+
+async function handleReprintTicket(firebaseKey) {
+  try {
+    const tickets = await fetchAllTickets();
+    const ticket = tickets.find((t) => t.firebaseKey === firebaseKey);
+    if (!ticket) {
+      alert("No se encontró el ticket en el historial.");
+      return;
+    }
+
+    await generateTicketPdf(ticket);
+  } catch (err) {
+    console.error("Error al reimprimir ticket:", err);
+    alert("Ocurrió un error al generar el PDF del comprobante.");
+  }
+}
+
+// =======================
+// PDF de comprobante (A4 con 2 mitades)
+// =======================
+
+let logoInfoCache = null;
+
+// Cargamos logo + dimensiones para mantener proporción en el PDF
+async function loadNovogarLogoInfo() {
+  if (logoInfoCache !== null) return logoInfoCache;
+
+  const LOGO_URL = "https://i.postimg.cc/MpgSGZkv/Novogar-N.png";
+
+  try {
+    const res = await fetch(LOGO_URL);
+    if (!res.ok) throw new Error("No se pudo cargar el logo");
+    const blob = await res.blob();
+
+    // DataURL
+    const dataUrlPromise = new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    // Dimensiones
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const dimPromise = new Promise((resolve, reject) => {
+      img.onload = () => {
+        resolve({ width: img.width || 1, height: img.height || 1 });
+      };
+      img.onerror = reject;
+    });
+    img.src = LOGO_URL;
+
+    const [dataUrl, dim] = await Promise.all([dataUrlPromise, dimPromise]);
+
+    logoInfoCache = {
+      dataUrl,
+      width: dim.width,
+      height: dim.height
+    };
+    return logoInfoCache;
+  } catch (err) {
+    console.warn("No se pudo cargar el logo para PDF:", err);
+    logoInfoCache = null;
+    return null;
+  }
+}
+
+// Sección de ticket (mitad de hoja)
+function drawTicketSection(doc, opts) {
+  const { x, y, width, copyLabel, ticket, logoInfo } = opts;
+  let cursorY = y;
+  const marginX = x;
+  const innerWidth = width;
+
+  const ticketNumberStr = String(ticket.ticketNumber || "").padStart(5, "0");
+
+  // Logo + encabezado (manteniendo proporción del logo)
+  if (logoInfo && logoInfo.dataUrl) {
+    const logoTargetWidth = 18;
+    const ratio =
+      logoInfo.width > 0 ? logoInfo.height / logoInfo.width : 1;
+    const logoTargetHeight = logoTargetWidth * ratio;
+
+    doc.addImage(
+      logoInfo.dataUrl,
+      "PNG",
+      marginX,
+      cursorY - 2,
+      logoTargetWidth,
+      logoTargetHeight
+    );
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(20);
+  doc.text(
+    "NOVOGAR",
+    marginX + (logoInfo ? 22 : 0),
+    cursorY + 3
+  );
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(90);
+  doc.text(
+    "SNP · Servicio de Posventa",
+    marginX + (logoInfo ? 22 : 0),
+    cursorY + 8
+  );
+
+  // Copy label centrado
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(20);
+  doc.text(copyLabel, marginX + innerWidth / 2, cursorY + 2, {
+    align: "center"
+  });
+
+  cursorY += 18;
+
+  // Título grande
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(15);
+  doc.text(
+    `Ticket SNP #${ticketNumberStr}`,
+    marginX + innerWidth / 2,
+    cursorY,
+    { align: "center" }
+  );
+
+  cursorY += 6;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+
+  const fecha = ticket.createdAtDisplay || "-";
+  const sucursal = ticket.sucursal || "-";
+
+  // Antes iban en la misma línea y se solapaban, ahora las separamos en dos líneas
+  doc.text(`Fecha (ARG): ${fecha}`, marginX, cursorY);
+  cursorY += 5;
+  doc.text(`Sucursal: ${sucursal}`, marginX, cursorY);
+  cursorY += 8;
+
+  // Caja cliente / datos principales
+  const boxTop = cursorY;
+  const boxPadding = 3;
+  const boxHeight = 40;
+
+  doc.setDrawColor(190);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(
+    marginX,
+    boxTop,
+    innerWidth,
+    boxHeight,
+    2,
+    2
+  );
+
+  cursorY += boxPadding + 3;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(20);
+
+  const cliente = ticket.cliente || "-";
+  const nroCliente = ticket.nroCliente || "-";
+  const telefono = ticket.telefono || "-";
+
+  doc.text(`Cliente: ${cliente}`, marginX + 3, cursorY);
+
+  cursorY += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(70);
+
+  doc.text(`N° de cliente: ${nroCliente}`, marginX + 3, cursorY);
+  doc.text(`Teléfono: ${telefono}`, marginX + innerWidth / 2, cursorY, {
+    align: "right"
+  });
+
+  cursorY += 5;
+
+  const direccion = ticket.direccion || "-";
+  const direccionLines = doc.splitTextToSize(
+    `Dirección: ${direccion}`,
+    innerWidth - 6
+  );
+  doc.text(direccionLines, marginX + 3, cursorY);
+
+  cursorY = boxTop + boxHeight + 6;
+
+  // Producto
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(20);
+  const producto = ticket.producto || "-";
+  doc.text(`Producto (SKU): ${producto}`, marginX, cursorY);
+
+  cursorY += 6;
+
+  // Falla
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(20);
+  doc.text("Falla / Reclamo:", marginX, cursorY);
+
+  cursorY += 4;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(60);
+
+  const falla = ticket.falla || "-";
+  const fallaLines = doc.splitTextToSize(falla, innerWidth);
+  doc.text(fallaLines, marginX, cursorY);
+
+  // Pie
+  const footerY = boxTop + boxHeight + 26 + 18;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text(
+    "Este comprobante fue generado desde el sistema SNP Novogar.",
+    marginX,
+    footerY
+  );
+}
+
+async function generateTicketPdf(ticket) {
+  const jspdfLib = window.jspdf;
+  if (!jspdfLib || !jspdfLib.jsPDF) {
+    alert("No se pudo cargar el generador de PDF (jsPDF).");
+    return;
+  }
+
+  const { jsPDF } = jspdfLib;
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4"
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 14;
+  const innerWidth = pageWidth - marginX * 2;
+  const halfHeight = pageHeight / 2;
+
+  const logoInfo = await loadNovogarLogoInfo();
+
+  // Mitad superior: copia cliente
+  drawTicketSection(doc, {
+    x: marginX,
+    y: 18,
+    width: innerWidth,
+    copyLabel: "COPIA PARA EL CLIENTE",
+    ticket,
+    logoInfo
+  });
+
+  // Línea punteada central
+  doc.setDrawColor(150);
+  doc.setLineWidth(0.3);
+  if (doc.setLineDash) {
+    doc.setLineDash([1.5, 1.5], 0);
+  }
+  const yLine = halfHeight;
+  doc.line(marginX, yLine, pageWidth - marginX, yLine);
+
+  // Mitad inferior: copia sucursal
+  if (doc.setLineDash) {
+    doc.setLineDash([]); // reset
+  }
+  drawTicketSection(doc, {
+    x: marginX,
+    y: yLine + 12,
+    width: innerWidth,
+    copyLabel: "COPIA PARA SUCURSAL",
+    ticket,
+    logoInfo
+  });
+
+  const ticketNumberStr = String(ticket.ticketNumber || "").padStart(5, "0");
+  doc.save(`ticket-snp-${ticketNumberStr}.pdf`);
+}
+
+// Cartel "Imprimir comprobante"
+
+function showPrintBanner(firebaseKey) {
+  const banner = document.getElementById("print-ticket-banner");
+  if (!banner) return;
+  banner.dataset.firebaseKey = firebaseKey;
+  banner.classList.remove("hidden");
+  banner.classList.add("visible");
+}
+
+function hidePrintBanner() {
+  const banner = document.getElementById("print-ticket-banner");
+  if (!banner) return;
+  banner.classList.remove("visible");
+  banner.classList.add("hidden");
+  banner.removeAttribute("data-firebase-key");
+}
+
+// =======================
 // DOM + eventos
 // =======================
 
@@ -556,6 +1079,112 @@ document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("snp-form");
   const productoInput = document.getElementById("producto");
   const suggestionsEl = document.getElementById("product-suggestions");
+
+  const navNew = document.getElementById("nav-new-ticket");
+  const navHistory = document.getElementById("nav-history");
+  const viewForm = document.getElementById("view-form");
+  const viewHistory = document.getElementById("view-history");
+
+  const searchHistoryInput = document.getElementById("history-search-input");
+  const historyPrevBtn = document.getElementById("history-prev-btn");
+  const historyNextBtn = document.getElementById("history-next-btn");
+  const historyListEl = document.getElementById("history-list");
+  const refreshHistoryBtn = document.getElementById("refresh-history-btn");
+
+  const printTicketBtn = document.getElementById("print-ticket-btn");
+
+  function setActiveView(view) {
+    if (!viewForm || !viewHistory) return;
+
+    if (view === "form") {
+      viewForm.classList.add("active");
+      viewHistory.classList.remove("active");
+      navNew?.classList.add("active");
+      navHistory?.classList.remove("active");
+    } else {
+      viewHistory.classList.add("active");
+      viewForm.classList.remove("active");
+      navHistory?.classList.add("active");
+      navNew?.classList.remove("active");
+
+      // Cargamos historial al entrar
+      loadAndRenderTickets();
+    }
+  }
+
+  if (navNew) {
+    navNew.addEventListener("click", () => setActiveView("form"));
+  }
+
+  if (navHistory) {
+    navHistory.addEventListener("click", () => setActiveView("history"));
+  }
+
+  if (refreshHistoryBtn) {
+    refreshHistoryBtn.addEventListener("click", () =>
+      loadAndRenderTickets({ forceReload: true })
+    );
+  }
+
+  if (searchHistoryInput) {
+    searchHistoryInput.addEventListener("input", () => {
+      applyHistoryFilters();
+    });
+  }
+
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener("click", () => {
+      if (currentHistoryPage > 1) {
+        currentHistoryPage -= 1;
+        renderHistoryPage();
+      }
+    });
+  }
+
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener("click", () => {
+      const totalPages =
+        Math.ceil(filteredTickets.length / HISTORY_PAGE_SIZE) || 1;
+      if (currentHistoryPage < totalPages) {
+        currentHistoryPage += 1;
+        renderHistoryPage();
+      }
+    });
+  }
+
+  if (historyListEl) {
+    historyListEl.addEventListener("click", (e) => {
+      const target = e.target.closest("[data-action='reprint']");
+      if (!target) return;
+      const card = target.closest(".history-card");
+      if (!card) return;
+      const firebaseKey = card.getAttribute("data-firebase-key");
+      if (!firebaseKey) return;
+      handleReprintTicket(firebaseKey);
+    });
+  }
+
+  if (printTicketBtn) {
+    printTicketBtn.addEventListener("click", async () => {
+      const banner = document.getElementById("print-ticket-banner");
+      if (!banner) return;
+      const firebaseKey = banner.dataset.firebaseKey;
+      if (!firebaseKey) return;
+
+      try {
+        const tickets = await fetchAllTickets();
+        const ticket = tickets.find((t) => t.firebaseKey === firebaseKey);
+        if (!ticket) {
+          alert("No se encontró el ticket en el historial.");
+          return;
+        }
+        await generateTicketPdf(ticket);
+      } catch (err) {
+        console.error("Error al generar PDF del comprobante:", err);
+        alert("Ocurrió un error al generar el PDF del comprobante.");
+      }
+    });
+  }
 
   // Autocomplete de PRODUCTO (SKU)
   if (productoInput && suggestionsEl) {
@@ -619,6 +1248,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      hidePrintBanner();
       showStatus("");
       setFormLoading(true);
       addOverlayStep("Validando datos del formulario…");
@@ -672,7 +1302,12 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         addOverlayStep("Guardando ticket en Firebase SNP…");
-        await guardarTicketEnFirebase({ ...ticketData });
+        const saveResult = await guardarTicketEnFirebase({
+          ...ticketData
+        });
+        const savedKey = saveResult?.key || firebaseKey;
+        ticketData.firebaseKey = savedKey;
+
         addOverlayStep("✔ Ticket guardado correctamente.", "ok");
 
         addOverlayStep("Registrando ticket en Google Sheets…");
@@ -771,6 +1406,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         showStatus("Ticket enviado correctamente.", "success");
         showToast();
+
+        // Invalidamos cache de historial para que incluya este ticket
+        ticketsCache = null;
+
+        // Mostramos cartel para imprimir comprobante
+        showPrintBanner(ticketData.firebaseKey);
+
         form.reset();
       } catch (err) {
         console.error(err);
@@ -788,6 +1430,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// =======================
+// Constantes
+// =======================
 
 const FIREBASE_SNP_BASE_URL =
   "https://snp-novogar-default-rtdb.asia-southeast1.firebasedatabase.app";

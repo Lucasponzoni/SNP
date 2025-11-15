@@ -41,267 +41,391 @@
       <header
         class="window-header d-flex align-items-center justify-content-between"
       >
-        <div class="window-dots">
-          <span class="dot dot-red"></span>
-          <span class="dot dot-yellow"></span>
-          <span class="dot dot-green"></span>
-        </div>
-        <div class="window-title">
-          <img
-            src="https://i.postimg.cc/MpgSGZkv/Novogar-N.png"
-            alt="Novogar"
-            class="window-logo"
-          />
-          <div class="window-title-text">
-            <h1>
-              <i class="bi bi-ticket-detailed me-1"></i>
-              SNP. Novogar
-            </h1>
-            <p>Formulario de tickets de posventa</p>
+        <div class="window-header-left d-flex align-items-center gap-3">
+          <div class="window-dots">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+          </div>
+          <div class="window-title">
+            <img
+              src="https://i.postimg.cc/MpgSGZkv/Novogar-N.png"
+              alt="Novogar"
+              class="window-logo"
+            />
+            <div class="window-title-text">
+              <h1>
+                <i class="bi bi-ticket-detailed me-1"></i>
+                SNP. Novogar
+              </h1>
+              <p>Formulario de tickets de posventa</p>
+            </div>
           </div>
         </div>
+
+        <nav class="window-nav">
+          <button
+            type="button"
+            id="nav-new-ticket"
+            class="window-nav-btn active"
+          >
+            <i class="bi bi-plus-circle me-1"></i>
+            Nuevo ticket
+          </button>
+          <button
+            type="button"
+            id="nav-history"
+            class="window-nav-btn"
+          >
+            <i class="bi bi-journal-text me-1"></i>
+            Historial
+          </button>
+        </nav>
       </header>
 
       <main class="window-body">
-        <form id="snp-form" class="form">
-          <div class="form-row">
-            <label for="sucursal">Sucursal</label>
-            <select
-              id="sucursal"
-              name="sucursal"
-              class="form-select"
-              required
-            >
-              <option value="">Seleccioná una sucursal…</option>
-
-              <option
-                value="Novogar ROSARIO - ECHESORTU"
-                data-gerente-email="leonardo.ferreyra@novogar.com.ar"
-                data-gerente-nombre="Leonardo Ferreyra"
+        <!-- Vista: formulario -->
+        <section id="view-form" class="view active">
+          <form id="snp-form" class="form">
+            <div class="form-row">
+              <label for="sucursal">Sucursal</label>
+              <select
+                id="sucursal"
+                name="sucursal"
+                class="form-select"
+                required
               >
-                Novogar ROSARIO - ECHESORTU
-              </option>
+                <option value="">Seleccioná una sucursal…</option>
 
-              <option
-                value="Novogar ARROYO SECO"
-                data-gerente-email="noelia.diluca@novogar.com.ar"
-                data-gerente-nombre="Noelia Di Luca"
-              >
-                Novogar ARROYO SECO
-              </option>
+                <option
+                  value="Novogar ROSARIO - ECHESORTU"
+                  data-gerente-email="leonardo.ferreyra@novogar.com.ar"
+                  data-gerente-nombre="Leonardo Ferreyra"
+                >
+                  Novogar ROSARIO - ECHESORTU
+                </option>
 
-              <option
-                value="Novogar VILLA GOBERNADOR GALVEZ"
-                data-gerente-email="matias.yulita@novogar.com.ar"
-                data-gerente-nombre="Matías Yulita"
-              >
-                Novogar VILLA GOBERNADOR GALVEZ
-              </option>
+                <option
+                  value="Novogar ARROYO SECO"
+                  data-gerente-email="noelia.diluca@novogar.com.ar"
+                  data-gerente-nombre="Noelia Di Luca"
+                >
+                  Novogar ARROYO SECO
+                </option>
 
-              <option
-                value="Novogar ROSARIO - ARIJÓN"
-                data-gerente-email="alejandro.asquini@novogar.com.ar"
-                data-gerente-nombre="Alejandro Asquini"
-              >
-                Novogar ROSARIO - ARIJÓN
-              </option>
+                <option
+                  value="Novogar VILLA GOBERNADOR GALVEZ"
+                  data-gerente-email="matias.yulita@novogar.com.ar"
+                  data-gerente-nombre="Matías Yulita"
+                >
+                  Novogar VILLA GOBERNADOR GALVEZ
+                </option>
 
-              <option
-                value="Novogar ROSARIO - PEATONAL"
-                data-gerente-email="diego.pezzillo@novogar.com.ar"
-                data-gerente-nombre="Diego Pezzillo"
-              >
-                Novogar ROSARIO - PEATONAL
-              </option>
+                <option
+                  value="Novogar ROSARIO - ARIJÓN"
+                  data-gerente-email="alejandro.asquini@novogar.com.ar"
+                  data-gerente-nombre="Alejandro Asquini"
+                >
+                  Novogar ROSARIO - ARIJÓN
+                </option>
 
-              <option
-                value="Novogar SAN LORENZO"
-                data-gerente-email="luciano.acosta@novogar.com.ar"
-                data-gerente-nombre="Luciano Acosta"
-              >
-                Novogar SAN LORENZO
-              </option>
+                <option
+                  value="Novogar ROSARIO - PEATONAL"
+                  data-gerente-email="diego.pezzillo@novogar.com.ar"
+                  data-gerente-nombre="Diego Pezzillo"
+                >
+                  Novogar ROSARIO - PEATONAL
+                </option>
 
-              <option
-                value="Novogar RAFAELA"
-                data-gerente-email="nicolas.mora@novogar.com.ar"
-                data-gerente-nombre="Nicolás Mora"
-              >
-                Novogar RAFAELA
-              </option>
+                <option
+                  value="Novogar SAN LORENZO"
+                  data-gerente-email="luciano.acosta@novogar.com.ar"
+                  data-gerente-nombre="Luciano Acosta"
+                >
+                  Novogar SAN LORENZO
+                </option>
 
-              <option
-                value="Novogar ALVEAR"
-                data-gerente-email="renzo.matteti@novogar.com.ar"
-                data-gerente-nombre="Renzo Matteti"
-              >
-                Novogar ALVEAR
-              </option>
+                <option
+                  value="Novogar RAFAELA"
+                  data-gerente-email="nicolas.mora@novogar.com.ar"
+                  data-gerente-nombre="Nicolás Mora"
+                >
+                  Novogar RAFAELA
+                </option>
 
-              <option
-                value="Novogar ROSARIO - SAN MARTIN"
-                data-gerente-email="esperanza.toffalo@novogar.com.ar"
-                data-gerente-nombre="Esperanza Toffalo"
-              >
-                Novogar ROSARIO - SAN MARTIN
-              </option>
+                <option
+                  value="Novogar ALVEAR"
+                  data-gerente-email="renzo.matteti@novogar.com.ar"
+                  data-gerente-nombre="Renzo Matteti"
+                >
+                  Novogar ALVEAR
+                </option>
 
-              <option
-                value="Novogar GRANADERO BAIGORRIA"
-                data-gerente-email="juan.pino@novogar.com.ar"
-                data-gerente-nombre="Juan Pino"
-              >
-                Novogar GRANADERO BAIGORRIA
-              </option>
+                <option
+                  value="Novogar ROSARIO - SAN MARTIN"
+                  data-gerente-email="esperanza.toffalo@novogar.com.ar"
+                  data-gerente-nombre="Esperanza Toffalo"
+                >
+                  Novogar ROSARIO - SAN MARTIN
+                </option>
 
-              <option
-                value="Novogar CUTRAL CÓ"
-                data-gerente-email="gino.diocares@novogar.com.ar"
-                data-gerente-nombre="Gino Diocares"
-              >
-                Novogar CUTRAL CÓ
-              </option>
+                <option
+                  value="Novogar GRANADERO BAIGORRIA"
+                  data-gerente-email="juan.pino@novogar.com.ar"
+                  data-gerente-nombre="Juan Pino"
+                >
+                  Novogar GRANADERO BAIGORRIA
+                </option>
 
-              <option
-                value="Novogar ZAPALA"
-                data-gerente-email="pedro.frias@novogar.com.ar"
-                data-gerente-nombre="Pedro Frías"
-              >
-                Novogar ZAPALA
-              </option>
+                <option
+                  value="Novogar CUTRAL CÓ"
+                  data-gerente-email="gino.diocares@novogar.com.ar"
+                  data-gerente-nombre="Gino Diocares"
+                >
+                  Novogar CUTRAL CÓ
+                </option>
 
-              <option
-                value="Novogar NEUQUÉN"
-                data-gerente-email="yamil.flores@novogar.com.ar"
-                data-gerente-nombre="Yamil Flores"
-              >
-                Novogar NEUQUÉN
-              </option>
+                <option
+                  value="Novogar ZAPALA"
+                  data-gerente-email="pedro.frias@novogar.com.ar"
+                  data-gerente-nombre="Pedro Frías"
+                >
+                  Novogar ZAPALA
+                </option>
 
-              <option
-                value="Novogar CIPOLLETTI"
-                data-gerente-email="antonella.uriarte@novogar.com.ar"
-                data-gerente-nombre="Antonella Uriarte"
-              >
-                Novogar CIPOLLETTI
-              </option>
+                <option
+                  value="Novogar NEUQUÉN"
+                  data-gerente-email="yamil.flores@novogar.com.ar"
+                  data-gerente-nombre="Yamil Flores"
+                >
+                  Novogar NEUQUÉN
+                </option>
 
-              <option
-                value="Novogar SAN JUSTO - BS AS"
-                data-gerente-email="fabricio.dambrosio@novogar.com.ar"
-                data-gerente-nombre="Fabricio Dambrosio"
-              >
-                Novogar SAN JUSTO - BS AS
-              </option>
-            </select>
-          </div>
+                <option
+                  value="Novogar CIPOLLETTI"
+                  data-gerente-email="antonella.uriarte@novogar.com.ar"
+                  data-gerente-nombre="Antonella Uriarte"
+                >
+                  Novogar CIPOLLETTI
+                </option>
 
-          <div class="form-row">
-            <label for="cliente">Cliente</label>
-            <input
-              type="text"
-              id="cliente"
-              name="cliente"
-              class="form-control uppercase-input"
-              placeholder="Nombre y apellido del cliente"
-              autocomplete="name"
-              required
-            />
-          </div>
+                <option
+                  value="Novogar SAN JUSTO - BS AS"
+                  data-gerente-email="fabricio.dambrosio@novogar.com.ar"
+                  data-gerente-nombre="Fabricio Dambrosio"
+                >
+                  Novogar SAN JUSTO - BS AS
+                </option>
+              </select>
+            </div>
 
-          <div class="form-row">
-            <label for="direccion">Dirección</label>
-            <input
-              type="text"
-              id="direccion"
-              name="direccion"
-              class="form-control uppercase-input"
-              placeholder="Dirección del cliente"
-              autocomplete="street-address"
-              required
-            />
-          </div>
-
-          <div class="form-row">
-            <label for="telefono">Teléfono</label>
-            <input
-              type="tel"
-              id="telefono"
-              name="telefono"
-              class="form-control"
-              placeholder="Teléfono de contacto"
-              autocomplete="tel"
-              required
-            />
-          </div>
-
-          <div class="form-row">
-            <label for="nroCliente">Número de cliente</label>
-            <input
-              type="text"
-              id="nroCliente"
-              name="nroCliente"
-              class="form-control"
-              placeholder="Número de cliente (si aplica)"
-              required
-            />
-          </div>
-
-          <div class="form-row product-row full">
-            <label for="producto">Producto (SKU)</label>
-            <div class="product-input-wrapper">
+            <div class="form-row">
+              <label for="cliente">Cliente</label>
               <input
                 type="text"
-                id="producto"
-                name="producto"
+                id="cliente"
+                name="cliente"
                 class="form-control uppercase-input"
-                placeholder="Ej: 061"
-                maxlength="10"
-                autocomplete="off"
+                placeholder="Nombre y apellido del cliente"
+                autocomplete="name"
                 required
               />
-              <ul
-                id="product-suggestions"
-                class="suggestions hidden list-unstyled"
-              ></ul>
             </div>
-            <small class="hint">
-              A partir de 3 dígitos se muestran sugerencias de SKU.
+
+            <div class="form-row">
+              <label for="direccion">Dirección</label>
+              <input
+                type="text"
+                id="direccion"
+                name="direccion"
+                class="form-control uppercase-input"
+                placeholder="Dirección del cliente"
+                autocomplete="street-address"
+                required
+              />
+            </div>
+
+            <div class="form-row">
+              <label for="telefono">Teléfono</label>
+              <input
+                type="tel"
+                id="telefono"
+                name="telefono"
+                class="form-control"
+                placeholder="Teléfono de contacto"
+                autocomplete="tel"
+                required
+              />
+            </div>
+
+            <div class="form-row">
+              <label for="nroCliente">Número de cliente</label>
+              <input
+                type="text"
+                id="nroCliente"
+                name="nroCliente"
+                class="form-control"
+                placeholder="Número de cliente (si aplica)"
+                required
+              />
+            </div>
+
+            <div class="form-row product-row full">
+              <label for="producto">Producto (SKU)</label>
+              <div class="product-input-wrapper">
+                <input
+                  type="text"
+                  id="producto"
+                  name="producto"
+                  class="form-control uppercase-input"
+                  placeholder="Ej: 061"
+                  maxlength="10"
+                  autocomplete="off"
+                  required
+                />
+                <ul
+                  id="product-suggestions"
+                  class="suggestions hidden list-unstyled"
+                ></ul>
+              </div>
+              <small class="hint">
+                A partir de 3 dígitos se muestran sugerencias de SKU.
+              </small>
+            </div>
+
+            <div class="form-row falla-row full">
+              <label for="falla">Falla</label>
+              <textarea
+                id="falla"
+                name="falla"
+                class="form-control"
+                rows="6"
+                placeholder="Describí la falla o reclamo del producto…"
+                required
+              ></textarea>
+            </div>
+
+            <div
+              id="form-status"
+              class="form-status full"
+              aria-live="polite"
+            ></div>
+
+            <!-- Cartel para imprimir comprobante -->
+            <div
+              id="print-ticket-banner"
+              class="print-banner hidden"
+            >
+              <div class="print-banner-inner">
+                <div class="print-banner-icon">
+                  <i class="bi bi-printer-fill"></i>
+                </div>
+                <div class="print-banner-text">
+                  <strong>Ticket generado correctamente</strong>
+                  <span>
+                    Hacé clic en <b>“Imprimir comprobante”</b> para generar el PDF A4.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  id="print-ticket-btn"
+                  class="btn btn-sm btn-outline-primary-macos"
+                >
+                  <i class="bi bi-printer me-1"></i>
+                  Imprimir comprobante
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              id="submit-btn"
+              class="btn btn-primary btn-primary-macos"
+            >
+              <span class="btn-content">
+                <span class="btn-label">
+                  <i class="bi bi-send me-1"></i>
+                  Enviar ticket
+                </span>
+                <span class="btn-spinner" aria-hidden="true"></span>
+              </span>
+            </button>
+          </form>
+        </section>
+
+        <!-- Vista: historial de tickets -->
+        <section id="view-history" class="view">
+          <div class="history-header d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h2 class="history-title mb-1">
+                <i class="bi bi-journal-text me-1"></i>
+                Historial de tickets
+              </h2>
+              <p class="history-subtitle mb-0">
+                Consultá el historial y reimprimí comprobantes de tickets SNP.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="refresh-history-btn"
+              class="btn btn-sm btn-outline-secondary-macos"
+            >
+              <i class="bi bi-arrow-clockwise me-1"></i>
+              Actualizar
+            </button>
+          </div>
+
+          <div class="history-search mb-3">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">
+                <i class="bi bi-search"></i>
+              </span>
+              <input
+                type="search"
+                id="history-search-input"
+                class="form-control"
+                placeholder="Buscar por sucursal, cliente, número de ticket, producto, teléfono o falla…"
+              />
+            </div>
+          </div>
+
+          <div id="history-list" class="history-list"></div>
+
+          <div
+            id="history-empty"
+            class="history-empty text-center py-4 d-none"
+          >
+            <p class="mb-1">No se encontraron tickets.</p>
+            <small class="text-muted">
+              Probá cambiando el texto de búsqueda o actualizá el historial.
             </small>
           </div>
 
-          <div class="form-row falla-row full">
-            <label for="falla">Falla</label>
-            <textarea
-              id="falla"
-              name="falla"
-              class="form-control"
-              rows="6"
-              placeholder="Describí la falla o reclamo del producto…"
-              required
-            ></textarea>
-          </div>
-
           <div
-            id="form-status"
-            class="form-status full"
-            aria-live="polite"
-          ></div>
-
-          <button
-            type="submit"
-            id="submit-btn"
-            class="btn btn-primary btn-primary-macos"
+            class="history-pagination d-flex justify-content-between align-items-center mt-3"
           >
-            <span class="btn-content">
-              <span class="btn-label">
-                <i class="bi bi-send me-1"></i>
-                Enviar ticket
-              </span>
-              <span class="btn-spinner" aria-hidden="true"></span>
-            </span>
-          </button>
-        </form>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary-macos"
+              id="history-prev-btn"
+            >
+              <i class="bi bi-chevron-left"></i>
+              Anterior
+            </button>
+            <div class="history-page-indicator">
+              Página <span id="history-page-current">1</span> de
+              <span id="history-page-total">1</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary-macos"
+              id="history-next-btn"
+            >
+              Siguiente
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -333,6 +457,16 @@
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
     defer
   ></script>
+
+  <!-- jsPDF para generar los comprobantes en PDF -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+    integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+    defer
+  ></script>
+
   <script src="app.js" defer></script>
 </body>
 </html>
