@@ -36,6 +36,20 @@ function getArgentinaDateInfo() {
 }
 
 // =======================
+// Helper fecha de compra
+// =======================
+function formatFechaCompra(fechaCompra) {
+  if (!fechaCompra) return "";
+  const v = String(fechaCompra).trim();
+  // Si viene como YYYY-MM-DD la paso a DD/MM/YYYY
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [yyyy, mm, dd] = v.split("-");
+    return `${dd}/${mm}/${yyyy}`;
+  }
+  return v; // cualquier otro formato lo dejo como viene
+}
+
+// =======================
 // Productos (autocomplete)
 // =======================
 
@@ -130,7 +144,8 @@ async function registrarTicketEnSheet(ticketData) {
     falla: ticketData.falla,
     createdAtDisplay: ticketData.createdAtDisplay,
     createdAtIso: ticketData.createdAtIso,
-    firebaseKey: ticketData.firebaseKey
+    firebaseKey: ticketData.firebaseKey,   // 👈 primero firebaseKey
+    fechaCompra: ticketData.fechaCompra    // 👈 luego fechaCompra
   };
 
   const body = new URLSearchParams({
@@ -163,6 +178,7 @@ function buildTicketEmailHtml(ticket, tipo) {
     telefono,
     producto,
     falla,
+    fechaCompra,     // 👈 usamos la fecha
     fechaDisplay,
     fechaIso
   } = ticket;
@@ -181,6 +197,8 @@ function buildTicketEmailHtml(ticket, tipo) {
     tipo === "gerente"
       ? "Recibiste esta copia porque figurás como gerente de la sucursal."
       : "Se cargó un nuevo ticket desde una sucursal de Novogar.";
+
+  const fechaCompraLabel = formatFechaCompra(fechaCompra);
 
   return `
   <!DOCTYPE html>
@@ -380,11 +398,17 @@ function buildTicketEmailHtml(ticket, tipo) {
                   <th>SKU</th>
                   <td><span class="badge">${producto}</span></td>
                 </tr>
+                <tr>
+                  <th>Fecha de compra</th>
+                  <td>${fechaCompraLabel || "-"}</td>
+                </tr>
               </table>
 
               <div class="section-title">Falla / Reclamo</div>
               <div class="falla-box">
-                ${falla.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+                ${(falla || "")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")}
               </div>
             </div>
 
@@ -645,6 +669,7 @@ function applyHistoryFilters() {
         t.sucursalGerenteNombre,
         t.cliente,
         t.nroCliente,
+        t.fechaCompra,          // 👈 searchable
         t.direccion,
         t.telefono,
         t.producto,
@@ -701,6 +726,9 @@ function renderHistoryPage() {
       const cliente = t.cliente || "-";
       const sucursal = t.sucursal || "-";
       const producto = t.producto || "-";
+      const fechaCompraLabel = t.fechaCompra
+        ? formatFechaCompra(t.fechaCompra)
+        : "";
       const fallaRes =
         t.falla && t.falla.length > 120
           ? `${t.falla.slice(0, 117)}…`
@@ -735,6 +763,16 @@ function renderHistoryPage() {
               <i class="bi bi-calendar-event"></i>
               <span>${createdAtDisplay}</span>
             </div>
+            ${
+              fechaCompraLabel
+                ? `
+            <div class="history-row">
+              <i class="bi bi-calendar-check"></i>
+              <span>Fecha de compra: <strong>${fechaCompraLabel}</strong></span>
+            </div>
+            `
+                : ""
+            }
             <div class="history-row history-row-falla">
               <i class="bi bi-chat-left-text"></i>
               <span>${fallaRes}</span>
@@ -963,7 +1001,20 @@ function drawTicketSection(doc, opts) {
   const producto = ticket.producto || "-";
   doc.text(`Producto (SKU): ${producto}`, marginX, cursorY);
 
-  cursorY += 6;
+  cursorY += 5;
+
+  // Fecha de compra (si existe)
+  const fechaCompraRaw = ticket.fechaCompra || "";
+  const fechaCompraLabel = formatFechaCompra(fechaCompraRaw);
+  if (fechaCompraLabel) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(70);
+    doc.text(`Fecha de compra: ${fechaCompraLabel}`, marginX, cursorY);
+    cursorY += 6;
+  } else {
+    cursorY += 2;
+  }
 
   // Falla
   doc.setFont("helvetica", "bold");
@@ -1258,6 +1309,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const direccionInput = document.getElementById("direccion");
       const telefonoInput = document.getElementById("telefono");
       const nroClienteInput = document.getElementById("nroCliente");
+      const fechaCompraInput = document.getElementById("fechaCompra");
       const productoInput2 = document.getElementById("producto");
       const fallaInput = document.getElementById("falla");
 
@@ -1294,6 +1346,7 @@ document.addEventListener("DOMContentLoaded", () => {
           telefono: telefonoInput.value.trim(),
           producto: productoInput2.value.trim().toUpperCase(),
           falla: fallaInput.value.trim(),
+          fechaCompra: fechaCompraInput ? fechaCompraInput.value : "",
           createdAtIso: iso,
           createdAtDisplay: display,
           timezone: "America/Argentina/Cordoba",
@@ -1335,6 +1388,7 @@ document.addEventListener("DOMContentLoaded", () => {
           telefono: ticketData.telefono,
           producto: ticketData.producto,
           falla: ticketData.falla,
+          fechaCompra: ticketData.fechaCompra,
           fechaDisplay: ticketData.createdAtDisplay,
           fechaIso: ticketData.createdAtIso
         };
