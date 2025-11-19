@@ -50,6 +50,22 @@ function formatFechaCompra(fechaCompra) {
 }
 
 // =======================
+// SweetAlert helpers
+// =======================
+function showSwalError(title, text) {
+  if (window.Swal) {
+    Swal.fire({
+      icon: "error",
+      title,
+      text,
+      confirmButtonColor: "#0a84ff"
+    });
+  } else {
+    console.error(title, text);
+  }
+}
+
+// =======================
 // Productos (autocomplete)
 // =======================
 
@@ -215,6 +231,49 @@ function removeSkuItem(item) {
   updateSkuLabelsAndIndices();
 }
 
+// Confirm de borrado con SweetAlert2 (sin alert/confirm nativos)
+async function confirmAndRemoveSkuItem(item) {
+  const items = getSkuItems();
+  if (items.length === 1) {
+    // No se permite borrar el último SKU
+    return;
+  }
+
+  const idx = Number(item.dataset.index || 0) || 0;
+  const skuInput = item.querySelector(".sku-input");
+  const skuValue = (skuInput?.value || "").trim().toUpperCase();
+
+  const title =
+    skuValue && idx
+      ? `Quitar SKU ${idx} (${skuValue})`
+      : `Quitar SKU`;
+
+  const text =
+    "Se eliminará este SKU y su descripción de falla del ticket. Esta acción no se puede deshacer dentro del formulario.";
+
+  if (window.Swal) {
+    const result = await Swal.fire({
+      title,
+      text,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#0a84ff",
+      cancelButtonColor: "#6b7280",
+      reverseButtons: true
+    });
+
+    if (result.isConfirmed) {
+      removeSkuItem(item);
+    }
+  } else {
+    // Si por algún motivo no está SweetAlert, borramos sin confirmar
+    console.warn("SweetAlert no disponible, se borra el SKU sin confirmación");
+    removeSkuItem(item);
+  }
+}
+
 function createSkuItem(index) {
   const div = document.createElement("div");
   div.className = "sku-item";
@@ -264,7 +323,7 @@ function createSkuItem(index) {
   const removeBtn = div.querySelector(".sku-remove-btn");
   if (removeBtn) {
     removeBtn.addEventListener("click", () => {
-      removeSkuItem(div);
+      confirmAndRemoveSkuItem(div);
     });
   }
 
@@ -374,8 +433,8 @@ async function registrarTicketEnSheet(ticketData) {
     falla: ticketData.falla,
     createdAtDisplay: ticketData.createdAtDisplay,
     createdAtIso: ticketData.createdAtIso,
-    firebaseKey: ticketData.firebaseKey,   // primero firebaseKey
-    fechaCompra: ticketData.fechaCompra    // luego fechaCompra
+    firebaseKey: ticketData.firebaseKey,
+    fechaCompra: ticketData.fechaCompra
   };
 
   const body = new URLSearchParams({
@@ -1034,14 +1093,20 @@ async function handleReprintTicket(firebaseKey) {
     const tickets = await fetchAllTickets();
     const ticket = tickets.find((t) => t.firebaseKey === firebaseKey);
     if (!ticket) {
-      alert("No se encontró el ticket en el historial.");
+      showSwalError(
+        "Ticket no encontrado",
+        "No se encontró el ticket en el historial."
+      );
       return;
     }
 
     await generateTicketPdf(ticket);
   } catch (err) {
     console.error("Error al reimprimir ticket:", err);
-    alert("Ocurrió un error al generar el PDF del comprobante.");
+    showSwalError(
+      "Error al generar PDF",
+      "Ocurrió un error al generar el PDF del comprobante."
+    );
   }
 }
 
@@ -1277,7 +1342,10 @@ function drawTicketSection(doc, opts) {
 async function generateTicketPdf(ticket) {
   const jspdfLib = window.jspdf;
   if (!jspdfLib || !jspdfLib.jsPDF) {
-    alert("No se pudo cargar el generador de PDF (jsPDF).");
+    showSwalError(
+      "PDF no disponible",
+      "No se pudo cargar el generador de PDF (jsPDF)."
+    );
     return;
   }
 
@@ -1455,13 +1523,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const tickets = await fetchAllTickets();
         const ticket = tickets.find((t) => t.firebaseKey === firebaseKey);
         if (!ticket) {
-          alert("No se encontró el ticket en el historial.");
+          showSwalError(
+            "Ticket no encontrado",
+            "No se encontró el ticket en el historial."
+          );
           return;
         }
         await generateTicketPdf(ticket);
       } catch (err) {
         console.error("Error al generar PDF del comprobante:", err);
-        alert("Ocurrió un error al generar el PDF del comprobante.");
+        showSwalError(
+          "Error al generar PDF",
+          "Ocurrió un error al generar el PDF del comprobante."
+        );
       }
     });
   }
