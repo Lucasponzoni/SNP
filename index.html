@@ -278,7 +278,6 @@
               />
             </div>
 
-            <!-- NUEVO: Fecha de compra al lado de Número de cliente -->
             <div class="form-row">
               <label for="fechaCompra">Fecha de compra</label>
               <input
@@ -286,42 +285,32 @@
                 id="fechaCompra"
                 name="fechaCompra"
                 class="form-control"
+                required
               />
             </div>
 
+            <!-- Bloque de SKUs múltiples -->
             <div class="form-row product-row full">
-              <label for="producto">Producto (SKU)</label>
-              <div class="product-input-wrapper">
-                <input
-                  type="text"
-                  id="producto"
-                  name="producto"
-                  class="form-control uppercase-input"
-                  placeholder="Ej: 061"
-                  maxlength="10"
-                  autocomplete="off"
-                  required
-                />
-                <ul
-                  id="product-suggestions"
-                  class="suggestions hidden list-unstyled"
-                ></ul>
+              <div class="sku-header">
+                <label>Productos (SKU)</label>
+                <button
+                  type="button"
+                  id="add-sku-btn"
+                  class="btn btn-xs btn-outline-secondary-macos"
+                >
+                  <i class="bi bi-plus-circle me-1"></i>
+                  Agregar SKU
+                </button>
               </div>
-              <small class="hint">
-                A partir de 3 dígitos se muestran sugerencias de SKU.
-              </small>
-            </div>
 
-            <div class="form-row falla-row full">
-              <label for="falla">Falla</label>
-              <textarea
-                id="falla"
-                name="falla"
-                class="form-control"
-                rows="6"
-                placeholder="Describí la falla o reclamo del producto…"
-                required
-              ></textarea>
+              <small class="hint">
+                Los SKU se cargan de a uno. Usá <b>“Agregar SKU”</b> para sumar más productos.
+                A partir de 3 dígitos se muestran sugerencias.
+              </small>
+
+              <div id="sku-list" class="sku-list">
+                <!-- Los ítems SKU se crean dinámicamente desde app.js -->
+              </div>
             </div>
 
             <div
@@ -403,7 +392,7 @@
                 type="search"
                 id="history-search-input"
                 class="form-control"
-                placeholder="Buscar por sucursal, cliente, número de ticket, producto, teléfono o falla…"
+                placeholder="Buscar por sucursal, cliente, número de ticket, producto, teléfono, fecha de compra o falla…"
               />
             </div>
           </div>

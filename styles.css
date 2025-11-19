@@ -21,19 +21,103 @@
   box-sizing: border-box;
 }
 
-html,
-body {
-  height: 100%;
+html {
+  min-height: 100%;
 }
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text",
     "Helvetica Neue", sans-serif;
-  background: radial-gradient(circle at top, #e0edff 0, #eef2ff 45%, #e5e7eb 100%);
+  min-height: 100vh;   
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: flex-start;  
+  overflow-y: auto;         
+  background: transparent; 
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background:
+    radial-gradient(circle at 10% 20%, rgba(129, 140, 248, 0.35), transparent 55%),
+    radial-gradient(circle at 80% 30%, rgba(56, 189, 248, 0.25), transparent 55%),
+    radial-gradient(circle at 20% 80%, rgba(244, 114, 182, 0.20), transparent 60%),
+    radial-gradient(circle at 90% 70%, rgba(52, 211, 153, 0.28), transparent 55%),
+    radial-gradient(circle at top, #e0edff 0, #eef2ff 45%, #e5e7eb 100%);
+  background-size: 130% 130%;
+  animation: bg-flow 40s ease-in-out infinite;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;          
+  z-index: -2;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0;
+
+  background:
+    radial-gradient(circle at 30% 40%, rgba(96, 165, 250, 0.0), rgba(96, 165, 250, 0.45), transparent 60%),
+    radial-gradient(circle at 70% 60%, rgba(248, 113, 113, 0.0), rgba(248, 113, 113, 0.38), transparent 60%),
+    radial-gradient(circle at 50% 80%, rgba(45, 212, 191, 0.0), rgba(45, 212, 191, 0.4), transparent 65%);
+  background-size: 160% 160%;
+  animation: bg-bursts 16s ease-in-out infinite;
+}
+
+/* Movimiento suave del fondo base */
+@keyframes bg-flow {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+  25% {
+    transform: scale(1.05) translate3d(0, -10px, 0);
+    filter: blur(0.5px);
+  }
+  50% {
+    transform: scale(1.03) translate3d(0, 8px, 0);
+    filter: blur(0.8px);
+  }
+  75% {
+    transform: scale(1.06) translate3d(-6px, -4px, 0);
+    filter: blur(0.4px);
+  }
+  100% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+}
+
+/* "Explosiones" que aparecen y se apagan en ciclos */
+@keyframes bg-bursts {
+  0%, 20% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  25%, 35% {
+    opacity: 0.75;
+    transform: translate3d(-10px, -10px, 0) scale(1.03);
+  }
+  40%, 60% {
+    opacity: 0;
+    transform: translate3d(12px, 6px, 0) scale(1.06);
+  }
+  65%, 75% {
+    opacity: 0.7;
+    transform: translate3d(-6px, 14px, 0) scale(1.02);
+  }
+  80%, 100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 /* Splash */
@@ -808,4 +892,102 @@ body {
 
 .view.active {
   display: block;
+}
+
+/* ===========================
+   SKUs múltiples en formulario
+   =========================== */
+
+/* Encabezado de la sección de SKUs (label + botón agregar) */
+.sku-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* Contenedor de todos los ítems de SKU */
+.sku-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Tarjeta para cada SKU */
+.sku-item {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.75);
+  background: rgba(248, 250, 252, 0.98);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  padding: 9px 10px 10px;
+}
+
+/* Encabezado dentro de cada SKU: pill + botón borrar */
+.sku-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* Pill "SKU 1", "SKU 2", etc. */
+.sku-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Botón de borrar dentro de cada SKU (más chico que el .btn-icon normal) */
+.btn-icon.btn-icon-xs {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+/* Versión "deshabilitada" del botón borrar cuando solo hay un SKU */
+.sku-remove-btn[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Bloque de la falla de cada SKU */
+.falla-row-sku {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Label de la falla por SKU (Falla SKU 1, Falla SKU 2, etc.) */
+.falla-row-sku .falla-label-sku {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+/* Hace que el textarea se adapte bien al bloque */
+.falla-row-sku .form-control {
+  min-height: 120px;
+}
+
+/* Ajuste extra para que el wrapper del input SKU no quede pegado al borde */
+.sku-item .product-input-wrapper {
+  margin-top: 2px;
+}
+
+/* En mobile, que los ítems no se sientan pesados */
+@media (max-width: 768px) {
+  .sku-item {
+    padding: 8px 9px 9px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  }
 }

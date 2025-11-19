@@ -102,6 +102,236 @@ function filtrarProductosPorSku(term) {
 }
 
 // =======================
+// Multi-SKU helpers
+// =======================
+
+function getSkuItems() {
+  return Array.from(document.querySelectorAll("#sku-list .sku-item"));
+}
+
+function attachSkuAutocompleteHandlers(skuItem) {
+  const input = skuItem.querySelector(".sku-input");
+  const suggestionsEl = skuItem.querySelector(".sku-suggestions");
+
+  if (!input || !suggestionsEl) return;
+
+  input.addEventListener("input", async (e) => {
+    const term = e.target.value.trim().toUpperCase();
+
+    if (term.length < 3) {
+      suggestionsEl.classList.add("hidden");
+      suggestionsEl.innerHTML = "";
+      return;
+    }
+
+    await loadProductosIfNeeded();
+    const matches = filtrarProductosPorSku(term).slice(0, 8);
+
+    if (!matches.length) {
+      suggestionsEl.classList.add("hidden");
+      suggestionsEl.innerHTML = "";
+      return;
+    }
+
+    suggestionsEl.innerHTML = matches
+      .map((p) => {
+        const precio =
+          p.contadoWeb || p.oferta || p.precioSugerido || p.ml || "";
+        const precioLabel = precio ? ` $${precio}` : "";
+        const stockLabel = p.stock ? ` · Stock: ${p.stock}` : "";
+        return `
+          <li data-sku="${p.sku}">
+            <span class="sku">${p.sku}</span>
+            <span class="meta">${precioLabel}${stockLabel}</span>
+          </li>
+        `;
+      })
+      .join("");
+
+    suggestionsEl.classList.remove("hidden");
+  });
+
+  suggestionsEl.addEventListener("click", (e) => {
+    const li = e.target.closest("li");
+    if (!li) return;
+    const sku = li.getAttribute("data-sku");
+    if (input) {
+      input.value = (sku || "").toUpperCase();
+      input.focus();
+    }
+    suggestionsEl.classList.add("hidden");
+    suggestionsEl.innerHTML = "";
+  });
+}
+
+function handleGlobalClickForSkuSuggestions(e) {
+  document.querySelectorAll(".sku-suggestions").forEach((ul) => {
+    const item = ul.closest(".sku-item");
+    if (!item) return;
+    if (!item.contains(e.target)) {
+      ul.classList.add("hidden");
+    }
+  });
+}
+
+function updateSkuLabelsAndIndices() {
+  const items = getSkuItems();
+
+  items.forEach((item, idx) => {
+    const index = idx + 1;
+    item.dataset.index = String(index);
+
+    const pill = item.querySelector(".sku-pill");
+    if (pill) pill.textContent = `SKU ${index}`;
+
+    const fallaLabel = item.querySelector(".falla-label-sku");
+    if (fallaLabel) fallaLabel.textContent = `Falla SKU ${index}`;
+
+    const skuInput = item.querySelector(".sku-input");
+    if (skuInput) {
+      skuInput.id = `producto-${index}`;
+      skuInput.name = `producto-${index}`;
+    }
+
+    const fallaInput = item.querySelector(".falla-input");
+    if (fallaInput) {
+      fallaInput.id = `falla-${index}`;
+      fallaInput.name = `falla-${index}`;
+    }
+  });
+
+  // Habilitar/deshabilitar botón borrar
+  items.forEach((item) => {
+    const removeBtn = item.querySelector(".sku-remove-btn");
+    if (removeBtn) {
+      removeBtn.disabled = items.length === 1;
+    }
+  });
+}
+
+function removeSkuItem(item) {
+  if (!item) return;
+  item.remove();
+  updateSkuLabelsAndIndices();
+}
+
+function createSkuItem(index) {
+  const div = document.createElement("div");
+  div.className = "sku-item";
+  div.dataset.index = String(index);
+
+  div.innerHTML = `
+    <div class="sku-item-header">
+      <span class="sku-pill">SKU ${index}</span>
+      <button
+        type="button"
+        class="btn-icon btn-icon-xs sku-remove-btn"
+        title="Quitar SKU"
+      >
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <div class="product-input-wrapper">
+      <input
+        type="text"
+        id="producto-${index}"
+        name="producto-${index}"
+        class="form-control uppercase-input sku-input"
+        placeholder="Ej: 061"
+        maxlength="10"
+        autocomplete="off"
+        required
+      />
+      <ul class="suggestions hidden list-unstyled sku-suggestions"></ul>
+    </div>
+
+    <div class="falla-row-sku">
+      <label for="falla-${index}" class="falla-label-sku">
+        Falla SKU ${index}
+      </label>
+      <textarea
+        id="falla-${index}"
+        name="falla-${index}"
+        class="form-control falla-input"
+        rows="4"
+        placeholder="Describí la falla de este SKU…"
+        required
+      ></textarea>
+    </div>
+  `;
+
+  const removeBtn = div.querySelector(".sku-remove-btn");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => {
+      removeSkuItem(div);
+    });
+  }
+
+  attachSkuAutocompleteHandlers(div);
+
+  return div;
+}
+
+function addNewSkuItem() {
+  const skuListEl = document.getElementById("sku-list");
+  if (!skuListEl) return;
+
+  const newIndex = getSkuItems().length + 1;
+  const item = createSkuItem(newIndex);
+  skuListEl.appendChild(item);
+  updateSkuLabelsAndIndices();
+}
+
+function initSkuSection() {
+  const skuListEl = document.getElementById("sku-list");
+  const addSkuBtn = document.getElementById("add-sku-btn");
+  if (!skuListEl) return;
+
+  if (!getSkuItems().length) {
+    const firstItem = createSkuItem(1);
+    skuListEl.appendChild(firstItem);
+  }
+
+  updateSkuLabelsAndIndices();
+
+  if (addSkuBtn) {
+    addSkuBtn.addEventListener("click", () => {
+      addNewSkuItem();
+    });
+  }
+
+  document.addEventListener("click", handleGlobalClickForSkuSuggestions);
+}
+
+// Arma producto/falla compuestos a partir de los SKUs del formulario
+function collectSkuAndFallasFromForm() {
+  const items = getSkuItems();
+  const skuList = [];
+  const fallaPartes = [];
+
+  items.forEach((item, idx) => {
+    const index = idx + 1;
+    const skuInput = item.querySelector(".sku-input");
+    const fallaInput = item.querySelector(".falla-input");
+    const sku = (skuInput?.value || "").trim().toUpperCase();
+    const falla = (fallaInput?.value || "").trim();
+
+    if (!sku || !falla) {
+      return;
+    }
+
+    skuList.push(sku);
+    fallaPartes.push(`Falla SKU ${index} (${sku}): ${falla}`);
+  });
+
+  return {
+    productoCompuesto: skuList.join(", "),
+    fallaCompuesta: fallaPartes.join(", ")
+  };
+}
+
+// =======================
 // Firebase: guardar ticket
 // =======================
 
@@ -144,8 +374,8 @@ async function registrarTicketEnSheet(ticketData) {
     falla: ticketData.falla,
     createdAtDisplay: ticketData.createdAtDisplay,
     createdAtIso: ticketData.createdAtIso,
-    firebaseKey: ticketData.firebaseKey,   // 👈 primero firebaseKey
-    fechaCompra: ticketData.fechaCompra    // 👈 luego fechaCompra
+    firebaseKey: ticketData.firebaseKey,   // primero firebaseKey
+    fechaCompra: ticketData.fechaCompra    // luego fechaCompra
   };
 
   const body = new URLSearchParams({
@@ -178,7 +408,7 @@ function buildTicketEmailHtml(ticket, tipo) {
     telefono,
     producto,
     falla,
-    fechaCompra,     // 👈 usamos la fecha
+    fechaCompra,
     fechaDisplay,
     fechaIso
   } = ticket;
@@ -395,7 +625,7 @@ function buildTicketEmailHtml(ticket, tipo) {
               <div class="section-title">Producto</div>
               <table class="meta-table">
                 <tr>
-                  <th>SKU</th>
+                  <th>SKU(s)</th>
                   <td><span class="badge">${producto}</span></td>
                 </tr>
                 <tr>
@@ -669,7 +899,7 @@ function applyHistoryFilters() {
         t.sucursalGerenteNombre,
         t.cliente,
         t.nroCliente,
-        t.fechaCompra,          // 👈 searchable
+        t.fechaCompra,
         t.direccion,
         t.telefono,
         t.producto,
@@ -757,7 +987,7 @@ function renderHistoryPage() {
             </div>
             <div class="history-row">
               <i class="bi bi-box-seam"></i>
-              <span>SKU: <strong>${producto}</strong></span>
+              <span>SKU(s): <strong>${producto}</strong></span>
             </div>
             <div class="history-row">
               <i class="bi bi-calendar-event"></i>
@@ -1126,10 +1356,9 @@ function hidePrintBanner() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initSplash();
+  initSkuSection();
 
   const form = document.getElementById("snp-form");
-  const productoInput = document.getElementById("producto");
-  const suggestionsEl = document.getElementById("product-suggestions");
 
   const navNew = document.getElementById("nav-new-ticket");
   const navHistory = document.getElementById("nav-history");
@@ -1237,64 +1466,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Autocomplete de PRODUCTO (SKU)
-  if (productoInput && suggestionsEl) {
-    productoInput.addEventListener("input", async (e) => {
-      const term = e.target.value.trim().toUpperCase();
-
-      if (term.length < 3) {
-        suggestionsEl.classList.add("hidden");
-        suggestionsEl.innerHTML = "";
-        return;
-      }
-
-      await loadProductosIfNeeded();
-      const matches = filtrarProductosPorSku(term).slice(0, 8);
-
-      if (!matches.length) {
-        suggestionsEl.classList.add("hidden");
-        suggestionsEl.innerHTML = "";
-        return;
-      }
-
-      suggestionsEl.innerHTML = matches
-        .map((p) => {
-          const precio =
-            p.contadoWeb || p.oferta || p.precioSugerido || p.ml || "";
-          const precioLabel = precio ? ` $${precio}` : "";
-          const stockLabel = p.stock ? ` · Stock: ${p.stock}` : "";
-          return `
-            <li data-sku="${p.sku}">
-              <span class="sku">${p.sku}</span>
-              <span class="meta">${precioLabel}${stockLabel}</span>
-            </li>
-          `;
-        })
-        .join("");
-
-      suggestionsEl.classList.remove("hidden");
-    });
-
-    suggestionsEl.addEventListener("click", (e) => {
-      const li = e.target.closest("li");
-      if (!li) return;
-      const sku = li.getAttribute("data-sku");
-      productoInput.value = (sku || "").toUpperCase();
-      suggestionsEl.classList.add("hidden");
-      suggestionsEl.innerHTML = "";
-      productoInput.focus();
-    });
-
-    document.addEventListener("click", (e) => {
-      if (
-        !suggestionsEl.contains(e.target) &&
-        e.target !== productoInput
-      ) {
-        suggestionsEl.classList.add("hidden");
-      }
-    });
-  }
-
   // Envío del formulario
   if (form) {
     form.addEventListener("submit", async (e) => {
@@ -1310,8 +1481,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const telefonoInput = document.getElementById("telefono");
       const nroClienteInput = document.getElementById("nroCliente");
       const fechaCompraInput = document.getElementById("fechaCompra");
-      const productoInput2 = document.getElementById("producto");
-      const fallaInput = document.getElementById("falla");
 
       try {
         if (
@@ -1320,10 +1489,18 @@ document.addEventListener("DOMContentLoaded", () => {
           !direccionInput.value.trim() ||
           !telefonoInput.value.trim() ||
           !nroClienteInput.value.trim() ||
-          !productoInput2.value.trim() ||
-          !fallaInput.value.trim()
+          !fechaCompraInput.value
         ) {
           throw new Error("Completá todos los campos del formulario.");
+        }
+
+        const { productoCompuesto, fallaCompuesta } =
+          collectSkuAndFallasFromForm();
+
+        if (!productoCompuesto || !fallaCompuesta) {
+          throw new Error(
+            "Cargá al menos un SKU y su falla. Si agregaste un SKU vacío, borralo o completalo."
+          );
         }
 
         const opt =
@@ -1344,9 +1521,9 @@ document.addEventListener("DOMContentLoaded", () => {
           nroCliente: nroClienteInput.value.trim().toUpperCase(),
           direccion: direccionInput.value.trim().toUpperCase(),
           telefono: telefonoInput.value.trim(),
-          producto: productoInput2.value.trim().toUpperCase(),
-          falla: fallaInput.value.trim(),
-          fechaCompra: fechaCompraInput ? fechaCompraInput.value : "",
+          producto: productoCompuesto,
+          falla: fallaCompuesta,
+          fechaCompra: fechaCompraInput.value,
           createdAtIso: iso,
           createdAtDisplay: display,
           timezone: "America/Argentina/Cordoba",
@@ -1467,7 +1644,15 @@ document.addEventListener("DOMContentLoaded", () => {
         // Mostramos cartel para imprimir comprobante
         showPrintBanner(ticketData.firebaseKey);
 
+        // Reseteamos formulario y dejamos solo 1 SKU limpio
         form.reset();
+        const skuListEl = document.getElementById("sku-list");
+        if (skuListEl) {
+          skuListEl.innerHTML = "";
+          const firstItem = createSkuItem(1);
+          skuListEl.appendChild(firstItem);
+          updateSkuLabelsAndIndices();
+        }
       } catch (err) {
         console.error(err);
         addOverlayStep(
