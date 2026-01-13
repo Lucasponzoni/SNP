@@ -1709,6 +1709,21 @@ document.addEventListener("DOMContentLoaded", () => {
           rSnp2.ok ? "ok" : "error"
         );
 
+        // 4) SNP secundario
+        addOverlayStep(`Enviando notificación a ${EMAIL_SNP_2}…`);
+        const rSnp3 = await sendEmailSnp({
+          toName: "SNP Novogar",
+          toEmail: EMAIL_SNP_2,
+          subject: subjectSnp,
+          htmlBody: htmlSnp
+        });
+        addOverlayStep(
+          rSnp3.ok
+            ? "✔ Notificación enviada a snp2@novogar.com.ar."
+            : "No se pudo notificar a snp2@novogar.com.ar.",
+          rSnp3.ok ? "ok" : "error"
+        );
+
         showStatus("Ticket enviado correctamente.", "success");
         showToast();
 
@@ -1764,6 +1779,7 @@ const SMTP_PASSWORD = "QbikuGyHqJ";
 
 const EMAIL_SNP = "snp@novogar.com.ar";
 const EMAIL_SNP_1 = "snp1@novogar.com.ar";
+const EMAIL_SNP_2 = "snp2@novogar.com.ar";
 
 // Apps Script → Google Sheets
 const APPSCRIPT_SHEET_ENDPOINT =
