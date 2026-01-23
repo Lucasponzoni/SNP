@@ -50,6 +50,44 @@ function formatFechaCompra(fechaCompra) {
 }
 
 // =======================
+// Normalizador de texto (búsquedas rápidas)
+// =======================
+function normalizeSearchText(input) {
+  return String(input || "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function sanitizeLocalidadDisplay(raw) {
+  const s = String(raw || "").trim().replace(/^_+/, "");
+  return s.toUpperCase();
+}
+
+function getLocalidadesDatasetSafe() {
+  // ciudades.js tiene: const localidades = [...]
+  try {
+    // eslint-disable-next-line no-undef
+    if (typeof localidades !== "undefined" && Array.isArray(localidades)) {
+      // eslint-disable-next-line no-undef
+      return localidades;
+    }
+  } catch (_) {}
+  // fallback por si el user lo expone como window.localidades
+  return Array.isArray(window.localidades) ? window.localidades : [];
+}
+
+function buildCiudadLabel(item) {
+  const cp = item?.cpPrimary ? String(item.cpPrimary) : "-";
+  const loc = item?.localidad ? String(item.localidad) : "-";
+  const prov = item?.provincia ? String(item.provincia) : "-";
+  return `${cp} · ${loc} · ${prov}`.toUpperCase();
+}
+
+// =======================
 // SweetAlert helpers
 // =======================
 function showSwalError(title, text) {
@@ -68,7 +106,6 @@ function showSwalError(title, text) {
 // =======================
 // Productos (autocomplete)
 // =======================
-
 let productosCache = null;
 let productosCargando = false;
 
@@ -112,15 +149,369 @@ async function loadProductosIfNeeded() {
 function filtrarProductosPorSku(term) {
   if (!productosCache) return [];
   const t = String(term).trim();
-  return productosCache.filter((p) =>
-    p.sku && p.sku.toString().startsWith(t)
-  );
+  return productosCache.filter((p) => p.sku && p.sku.toString().startsWith(t));
+}
+
+// =======================
+// Ciudad / Localidad (autocomplete + infinite scroll)
+// =======================
+let ciudadesIndexReady = false;
+
+let ciudadesItems = []; // [{id, localidad, provincia, partido, cps[], cpPrimary, locN, provN}]
+let ciudadesPrefixMap = new Map(); // prefix3 -> indices[]
+let ciudadesCpPrefix2Map = new Map(); // prefix2 -> Set(indices)
+let ciudadesCpMap = new Map(); // full cp -> indices[]
+
+const CITY_PAGE_SIZE = 20;
+const CITY_RENDER_MAX = 300;
+
+let cityState = {
+  selected: null,
+  matches: [],
+  page: 0,
+  termNorm: "",
+  inputTimer: null
+};
+
+function pushToMapArray(map, key, value) {
+  if (!key) return;
+  const arr = map.get(key);
+  if (arr) arr.push(value);
+  else map.set(key, [value]);
+}
+
+function pushToMapSet(map, key, value) {
+  if (!key) return;
+  const set = map.get(key);
+  if (set) set.add(value);
+  else map.set(key, new Set([value]));
+}
+
+function prepareCiudadesIndexIfNeeded() {
+  if (ciudadesIndexReady) return;
+
+  const data = getLocalidadesDatasetSafe();
+  if (!Array.isArray(data) || !data.length) {
+    console.warn("Dataset de ciudades no disponible o vacío (ciudades.js).");
+    ciudadesItems = [];
+    ciudadesIndexReady = true;
+    return;
+  }
+
+  const items = [];
+  const prefixMap = new Map();
+  const cpPrefix2Map = new Map();
+  const cpMap = new Map();
+
+  for (let i = 0; i < data.length; i++) {
+    const raw = data[i] || {};
+    const id = String(raw.idDeProvLocalidad || "").trim();
+
+    const localidad = sanitizeLocalidadDisplay(raw.localidad);
+    const provincia = sanitizeLocalidadDisplay(raw.provincia);
+    const partido = sanitizeLocalidadDisplay(raw.partido);
+
+    const cps = Array.isArray(raw.codigosPostales)
+      ? raw.codigosPostales.map((c) => String(c || "").trim()).filter(Boolean)
+      : [];
+
+    const cpPrimary = cps[0] || "";
+
+    const locN = normalizeSearchText(localidad);
+    const provN = normalizeSearchText(provincia);
+
+    const item = {
+      id,
+      localidad,
+      provincia,
+      partido,
+      cps,
+      cpPrimary,
+      locN,
+      provN
+    };
+
+    const idx = items.length;
+    items.push(item);
+
+    // Prefix locality (3 chars)
+    const prefix3 = locN.slice(0, 3);
+    if (prefix3.length === 3) {
+      pushToMapArray(prefixMap, prefix3, idx);
+    }
+
+    // CP indices
+    for (let k = 0; k < cps.length; k++) {
+      const cp = String(cps[k] || "").trim();
+      if (!cp) continue;
+
+      const p2 = cp.slice(0, 2);
+      if (p2.length === 2) pushToMapSet(cpPrefix2Map, p2, idx);
+
+      pushToMapArray(cpMap, cp, idx);
+    }
+  }
+
+  ciudadesItems = items;
+  ciudadesPrefixMap = prefixMap;
+  ciudadesCpPrefix2Map = cpPrefix2Map;
+  ciudadesCpMap = cpMap;
+  ciudadesIndexReady = true;
+}
+
+function getCityMatches(termNorm) {
+  if (!termNorm) return [];
+
+  // si es número → buscar por CP
+  const isDigitsOnly = /^\d+$/.test(termNorm);
+
+  if (isDigitsOnly && termNorm.length >= 2) {
+    const p2 = termNorm.slice(0, 2);
+    const set = ciudadesCpPrefix2Map.get(p2);
+    if (!set) return [];
+
+    const candidate = Array.from(set);
+    const filtered = [];
+
+    for (let i = 0; i < candidate.length; i++) {
+      const idx = candidate[i];
+      const item = ciudadesItems[idx];
+      if (!item) continue;
+
+      const ok = (item.cps || []).some((cp) => String(cp).startsWith(termNorm));
+      if (ok) filtered.push(idx);
+
+      if (filtered.length >= CITY_RENDER_MAX) break;
+    }
+
+    // ranking: CP exact first, luego cpPrimary, luego localidad
+    filtered.sort((a, b) => {
+      const A = ciudadesItems[a];
+      const B = ciudadesItems[b];
+      const aExact = (A.cps || []).some((cp) => String(cp) === termNorm) ? 0 : 1;
+      const bExact = (B.cps || []).some((cp) => String(cp) === termNorm) ? 0 : 1;
+      if (aExact !== bExact) return aExact - bExact;
+
+      const aCp = String(A.cpPrimary || "");
+      const bCp = String(B.cpPrimary || "");
+      if (aCp !== bCp) return aCp.localeCompare(bCp);
+
+      const aLoc = String(A.localidad || "");
+      const bLoc = String(B.localidad || "");
+      if (aLoc !== bLoc) return aLoc.localeCompare(bLoc);
+
+      return String(A.provincia || "").localeCompare(String(B.provincia || ""));
+    });
+
+    return filtered;
+  }
+
+  // texto → buscar por localidad
+  if (termNorm.length < 3) return [];
+
+  const prefix3 = termNorm.slice(0, 3);
+  const candidates = ciudadesPrefixMap.get(prefix3) || [];
+  if (!candidates.length) return [];
+
+  const filtered = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const idx = candidates[i];
+    const item = ciudadesItems[idx];
+    if (!item) continue;
+
+    if (item.locN.includes(termNorm)) {
+      filtered.push(idx);
+      if (filtered.length >= CITY_RENDER_MAX) break;
+    }
+  }
+
+  filtered.sort((a, b) => {
+    const A = ciudadesItems[a];
+    const B = ciudadesItems[b];
+    const aLoc = String(A.localidad || "");
+    const bLoc = String(B.localidad || "");
+    if (aLoc !== bLoc) return aLoc.localeCompare(bLoc);
+
+    const aProv = String(A.provincia || "");
+    const bProv = String(B.provincia || "");
+    if (aProv !== bProv) return aProv.localeCompare(bProv);
+
+    const aCp = String(A.cpPrimary || "");
+    const bCp = String(B.cpPrimary || "");
+    return aCp.localeCompare(bCp);
+  });
+
+  return filtered;
+}
+
+function setSelectedCityInForm(item) {
+  const input = document.getElementById("ciudad");
+  const sug = document.getElementById("ciudad-suggestions");
+
+  const hidId = document.getElementById("ciudadId");
+  const hidCp = document.getElementById("ciudadCp");
+  const hidLoc = document.getElementById("ciudadLocalidad");
+  const hidProv = document.getElementById("ciudadProvincia");
+
+  if (!input) return;
+
+  cityState.selected = item || null;
+
+  if (item) {
+    const label = buildCiudadLabel(item);
+    input.value = label;
+    input.dataset.selected = "1";
+
+    if (hidId) hidId.value = item.id || "";
+    if (hidCp) hidCp.value = item.cpPrimary || "";
+    if (hidLoc) hidLoc.value = item.localidad || "";
+    if (hidProv) hidProv.value = item.provincia || "";
+
+    if (sug) {
+      sug.classList.add("hidden");
+      sug.innerHTML = "";
+    }
+  } else {
+    input.dataset.selected = "0";
+    if (hidId) hidId.value = "";
+    if (hidCp) hidCp.value = "";
+    if (hidLoc) hidLoc.value = "";
+    if (hidProv) hidProv.value = "";
+  }
+}
+
+function renderCitySuggestions(reset = false) {
+  const suggestionsEl = document.getElementById("ciudad-suggestions");
+  if (!suggestionsEl) return;
+
+  if (reset) {
+    suggestionsEl.scrollTop = 0;
+    suggestionsEl.innerHTML = "";
+  }
+
+  const total = cityState.matches.length;
+  if (!total) {
+    suggestionsEl.innerHTML = "";
+    suggestionsEl.classList.add("hidden");
+    return;
+  }
+
+  const nextPage = cityState.page + 1;
+  const start = (nextPage - 1) * CITY_PAGE_SIZE;
+  const end = Math.min(start + CITY_PAGE_SIZE, total);
+
+  if (start >= end) return;
+
+  const frag = document.createDocumentFragment();
+
+  for (let i = start; i < end; i++) {
+    const idx = cityState.matches[i];
+    const item = ciudadesItems[idx];
+    if (!item) continue;
+
+    const cp = item.cpPrimary || (item.cps && item.cps[0]) || "-";
+    const loc = item.localidad || "-";
+    const prov = item.provincia || "-";
+
+    const li = document.createElement("li");
+    li.setAttribute("data-city-idx", String(idx));
+    li.innerHTML = `
+      <div class="city-left">
+        <div class="city-name">${loc}</div>
+        <div class="city-prov">${prov}</div>
+      </div>
+      <div class="city-cp">${cp}</div>
+    `;
+    frag.appendChild(li);
+  }
+
+  suggestionsEl.appendChild(frag);
+  cityState.page = nextPage;
+
+  suggestionsEl.classList.remove("hidden");
+}
+
+function initCityAutocomplete() {
+  const input = document.getElementById("ciudad");
+  const suggestionsEl = document.getElementById("ciudad-suggestions");
+  if (!input || !suggestionsEl) return;
+
+  prepareCiudadesIndexIfNeeded();
+
+  const onInput = () => {
+    // si el usuario escribe, invalido selección anterior
+    if (cityState.selected) {
+      setSelectedCityInForm(null);
+    }
+
+    const raw = input.value || "";
+    const termNorm = normalizeSearchText(raw);
+
+    cityState.termNorm = termNorm;
+    cityState.page = 0;
+
+    // reglas mínimas: CP >= 2 dígitos, Texto >= 3 caracteres
+    const isDigits = /^\d+$/.test(termNorm);
+
+    if ((isDigits && termNorm.length < 2) || (!isDigits && termNorm.length < 3)) {
+      suggestionsEl.classList.add("hidden");
+      suggestionsEl.innerHTML = "";
+      cityState.matches = [];
+      return;
+    }
+
+    cityState.matches = getCityMatches(termNorm);
+    renderCitySuggestions(true);
+  };
+
+  input.addEventListener("input", () => {
+    if (cityState.inputTimer) clearTimeout(cityState.inputTimer);
+    cityState.inputTimer = setTimeout(onInput, 110);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    // Enter: si hay sugerencias y no seleccionó, selecciono el primero
+    if (e.key === "Enter") {
+      const listVisible = !suggestionsEl.classList.contains("hidden");
+      const hasOne = suggestionsEl.querySelector("li[data-city-idx]");
+      if (listVisible && hasOne && !cityState.selected) {
+        e.preventDefault();
+        const idx = Number(hasOne.getAttribute("data-city-idx") || -1);
+        if (idx >= 0 && ciudadesItems[idx]) {
+          setSelectedCityInForm(ciudadesItems[idx]);
+        }
+      }
+    }
+    if (e.key === "Escape") {
+      suggestionsEl.classList.add("hidden");
+    }
+  });
+
+  suggestionsEl.addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-city-idx]");
+    if (!li) return;
+    const idx = Number(li.getAttribute("data-city-idx") || -1);
+    const item = ciudadesItems[idx];
+    if (!item) return;
+
+    setSelectedCityInForm(item);
+    input.focus();
+  });
+
+  suggestionsEl.addEventListener("scroll", () => {
+    const nearBottom =
+      suggestionsEl.scrollTop + suggestionsEl.clientHeight >=
+      suggestionsEl.scrollHeight - 18;
+
+    if (nearBottom) {
+      renderCitySuggestions(false);
+    }
+  });
 }
 
 // =======================
 // Multi-SKU helpers
 // =======================
-
 function getSkuItems() {
   return Array.from(document.querySelectorAll("#sku-list .sku-item"));
 }
@@ -151,8 +542,7 @@ function attachSkuAutocompleteHandlers(skuItem) {
 
     suggestionsEl.innerHTML = matches
       .map((p) => {
-        const precio =
-          p.contadoWeb || p.oferta || p.precioSugerido || p.ml || "";
+        const precio = p.contadoWeb || p.oferta || p.precioSugerido || p.ml || "";
         const precioLabel = precio ? ` $${precio}` : "";
         const stockLabel = p.stock ? ` · Stock: ${p.stock}` : "";
         return `
@@ -180,11 +570,11 @@ function attachSkuAutocompleteHandlers(skuItem) {
   });
 }
 
-function handleGlobalClickForSkuSuggestions(e) {
-  document.querySelectorAll(".sku-suggestions").forEach((ul) => {
-    const item = ul.closest(".sku-item");
-    if (!item) return;
-    if (!item.contains(e.target)) {
+function handleGlobalClickForAllSuggestions(e) {
+  document.querySelectorAll(".suggestions").forEach((ul) => {
+    const wrapper = ul.closest(".product-input-wrapper") || ul.parentElement;
+    if (!wrapper) return;
+    if (!wrapper.contains(e.target)) {
       ul.classList.add("hidden");
     }
   });
@@ -243,10 +633,7 @@ async function confirmAndRemoveSkuItem(item) {
   const skuInput = item.querySelector(".sku-input");
   const skuValue = (skuInput?.value || "").trim().toUpperCase();
 
-  const title =
-    skuValue && idx
-      ? `Quitar SKU ${idx} (${skuValue})`
-      : `Quitar SKU`;
+  const title = skuValue && idx ? `Quitar SKU ${idx} (${skuValue})` : `Quitar SKU`;
 
   const text =
     "Se eliminará este SKU y su descripción de falla del ticket. Esta acción no se puede deshacer dentro del formulario.";
@@ -359,8 +746,6 @@ function initSkuSection() {
       addNewSkuItem();
     });
   }
-
-  document.addEventListener("click", handleGlobalClickForSkuSuggestions);
 }
 
 // Arma producto/falla compuestos a partir de los SKUs del formulario
@@ -393,12 +778,9 @@ function collectSkuAndFallasFromForm() {
 // =======================
 // Firebase: guardar ticket
 // =======================
-
 async function guardarTicketEnFirebase(ticketData) {
   const { firebaseKey } = getArgentinaDateInfo();
-  const url = `${FIREBASE_SNP_BASE_URL}/snp/${encodeURIComponent(
-    firebaseKey
-  )}.json`;
+  const url = `${FIREBASE_SNP_BASE_URL}/snp/${encodeURIComponent(firebaseKey)}.json`;
 
   const res = await fetch(url, {
     method: "PUT",
@@ -415,12 +797,7 @@ async function guardarTicketEnFirebase(ticketData) {
   return { key: firebaseKey, data: resultado };
 }
 
-// =======================
-// Apps Script → Google Sheets
-// =======================
-
 async function registrarTicketEnSheet(ticketData) {
-  // Enviar como x-www-form-urlencoded + no-cors
   const payload = {
     sucursal: ticketData.sucursal,
     sucursalGerenteNombre: ticketData.sucursalGerenteNombre,
@@ -434,28 +811,26 @@ async function registrarTicketEnSheet(ticketData) {
     createdAtDisplay: ticketData.createdAtDisplay,
     createdAtIso: ticketData.createdAtIso,
     firebaseKey: ticketData.firebaseKey,
-    fechaCompra: ticketData.fechaCompra
+    fechaCompra: ticketData.fechaCompra,
+    ciudad: ticketData.ciudad
   };
 
   const body = new URLSearchParams({
     payload: JSON.stringify(payload)
   });
 
-  // mode: "no-cors" → el request se envía igual, pero no se puede leer el response
   await fetch(APPSCRIPT_SHEET_ENDPOINT, {
     method: "POST",
     body,
     mode: "no-cors"
   });
 
-  // No devolvemos JSON porque el response es opaco
   return { ok: true };
 }
 
 // =======================
 // Email template HTML
 // =======================
-
 function buildTicketEmailHtml(ticket, tipo) {
   const {
     sucursal,
@@ -464,6 +839,7 @@ function buildTicketEmailHtml(ticket, tipo) {
     cliente,
     nroCliente,
     direccion,
+    ciudad, // ✅ NUEVO
     telefono,
     producto,
     falla,
@@ -488,6 +864,7 @@ function buildTicketEmailHtml(ticket, tipo) {
       : "Se cargó un nuevo ticket desde una sucursal de Novogar.";
 
   const fechaCompraLabel = formatFechaCompra(fechaCompra);
+  const ciudadLabel = ciudad || "-";
 
   return `
   <!DOCTYPE html>
@@ -651,9 +1028,7 @@ function buildTicketEmailHtml(ticket, tipo) {
                 </tr>
                 <tr>
                   <th>Gerente</th>
-                  <td>${sucursalGerenteNombre || "-"} &lt;${
-    sucursalGerenteEmail || "-"
-  }&gt;</td>
+                  <td>${sucursalGerenteNombre || "-"} &lt;${sucursalGerenteEmail || "-"}&gt;</td>
                 </tr>
               </table>
             </div>
@@ -672,6 +1047,10 @@ function buildTicketEmailHtml(ticket, tipo) {
                 <tr>
                   <th>Dirección</th>
                   <td>${direccion}</td>
+                </tr>
+                <tr>
+                  <th>Ciudad / Localidad</th>
+                  <td>${ciudadLabel}</td>
                 </tr>
                 <tr>
                   <th>Teléfono</th>
@@ -719,7 +1098,6 @@ function buildTicketEmailHtml(ticket, tipo) {
 // =======================
 // Envío MailUp
 // =======================
-
 async function sendEmailSnp({ toName, toEmail, subject, htmlBody }) {
   const safeEmail = String(toEmail || "").trim();
   if (!safeEmail) {
@@ -788,7 +1166,6 @@ async function sendEmailSnp({ toName, toEmail, subject, htmlBody }) {
 // =======================
 // UI helpers
 // =======================
-
 function setFormLoading(loading) {
   const btn = document.getElementById("submit-btn");
   const overlay = document.getElementById("overlay-loading");
@@ -862,7 +1239,6 @@ function initSplash() {
 // =======================
 // Historial de tickets
 // =======================
-
 let ticketsCache = null; // array completo ordenado por fecha asc con ticketNumber
 let allTicketsDesc = []; // vista ordenada desc para historial
 let filteredTickets = [];
@@ -876,7 +1252,7 @@ async function fetchAllTickets() {
   const res = await fetch(url);
   if (!res.ok) throw new Error("No se pudo cargar el historial de tickets.");
 
-  const data = await res.json().catch(() => null) || {};
+  const data = (await res.json().catch(() => null)) || {};
 
   const arr = Object.entries(data).map(([firebaseKey, value]) => ({
     firebaseKey,
@@ -960,6 +1336,7 @@ function applyHistoryFilters() {
         t.nroCliente,
         t.fechaCompra,
         t.direccion,
+        t.ciudad, // ✅ NUEVO
         t.telefono,
         t.producto,
         t.falla,
@@ -1015,9 +1392,11 @@ function renderHistoryPage() {
       const cliente = t.cliente || "-";
       const sucursal = t.sucursal || "-";
       const producto = t.producto || "-";
+      const ciudad = t.ciudad || ""; // ✅ NUEVO
       const fechaCompraLabel = t.fechaCompra
         ? formatFechaCompra(t.fechaCompra)
         : "";
+
       const fallaRes =
         t.falla && t.falla.length > 120
           ? `${t.falla.slice(0, 117)}…`
@@ -1039,19 +1418,34 @@ function renderHistoryPage() {
               <i class="bi bi-printer-fill"></i>
             </button>
           </header>
+
           <div class="history-card-body">
             <div class="history-row">
               <i class="bi bi-shop"></i>
               <span>${sucursal}</span>
             </div>
+
+            ${
+              ciudad
+                ? `
+            <div class="history-row">
+              <i class="bi bi-geo-alt"></i>
+              <span>${ciudad}</span>
+            </div>
+            `
+                : ""
+            }
+
             <div class="history-row">
               <i class="bi bi-box-seam"></i>
               <span>SKU(s): <strong>${producto}</strong></span>
             </div>
+
             <div class="history-row">
               <i class="bi bi-calendar-event"></i>
               <span>${createdAtDisplay}</span>
             </div>
+
             ${
               fechaCompraLabel
                 ? `
@@ -1062,11 +1456,13 @@ function renderHistoryPage() {
             `
                 : ""
             }
+
             <div class="history-row history-row-falla">
               <i class="bi bi-chat-left-text"></i>
               <span>${fallaRes}</span>
             </div>
           </div>
+
           <footer class="history-card-footer">
             <button
               type="button"
@@ -1093,27 +1489,20 @@ async function handleReprintTicket(firebaseKey) {
     const tickets = await fetchAllTickets();
     const ticket = tickets.find((t) => t.firebaseKey === firebaseKey);
     if (!ticket) {
-      showSwalError(
-        "Ticket no encontrado",
-        "No se encontró el ticket en el historial."
-      );
+      showSwalError("Ticket no encontrado", "No se encontró el ticket en el historial.");
       return;
     }
 
     await generateTicketPdf(ticket);
   } catch (err) {
     console.error("Error al reimprimir ticket:", err);
-    showSwalError(
-      "Error al generar PDF",
-      "Ocurrió un error al generar el PDF del comprobante."
-    );
+    showSwalError("Error al generar PDF", "Ocurrió un error al generar el PDF del comprobante.");
   }
 }
 
 // =======================
 // PDF de comprobante (A4 con 2 mitades)
 // =======================
-
 let logoInfoCache = null;
 
 // Cargamos logo + dimensiones para mantener proporción en el PDF
@@ -1173,45 +1562,27 @@ function drawTicketSection(doc, opts) {
   // Logo + encabezado (manteniendo proporción del logo)
   if (logoInfo && logoInfo.dataUrl) {
     const logoTargetWidth = 18;
-    const ratio =
-      logoInfo.width > 0 ? logoInfo.height / logoInfo.width : 1;
+    const ratio = logoInfo.width > 0 ? logoInfo.height / logoInfo.width : 1;
     const logoTargetHeight = logoTargetWidth * ratio;
 
-    doc.addImage(
-      logoInfo.dataUrl,
-      "PNG",
-      marginX,
-      cursorY - 2,
-      logoTargetWidth,
-      logoTargetHeight
-    );
+    doc.addImage(logoInfo.dataUrl, "PNG", marginX, cursorY - 2, logoTargetWidth, logoTargetHeight);
   }
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(20);
-  doc.text(
-    "NOVOGAR",
-    marginX + (logoInfo ? 22 : 0),
-    cursorY + 3
-  );
+  doc.text("NOVOGAR", marginX + (logoInfo ? 22 : 0), cursorY + 3);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(90);
-  doc.text(
-    "SNP · Servicio de Posventa",
-    marginX + (logoInfo ? 22 : 0),
-    cursorY + 8
-  );
+  doc.text("SNP · Servicio de Posventa", marginX + (logoInfo ? 22 : 0), cursorY + 8);
 
   // Copy label centrado
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(20);
-  doc.text(copyLabel, marginX + innerWidth / 2, cursorY + 2, {
-    align: "center"
-  });
+  doc.text(copyLabel, marginX + innerWidth / 2, cursorY + 2, { align: "center" });
 
   cursorY += 18;
 
@@ -1219,12 +1590,7 @@ function drawTicketSection(doc, opts) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(15);
-  doc.text(
-    `Ticket SNP #${ticketNumberStr}`,
-    marginX + innerWidth / 2,
-    cursorY,
-    { align: "center" }
-  );
+  doc.text(`Ticket SNP #${ticketNumberStr}`, marginX + innerWidth / 2, cursorY, { align: "center" });
 
   cursorY += 6;
 
@@ -1235,37 +1601,39 @@ function drawTicketSection(doc, opts) {
   const fecha = ticket.createdAtDisplay || "-";
   const sucursal = ticket.sucursal || "-";
 
-  // Antes iban en la misma línea y se solapaban, ahora las separamos en dos líneas
   doc.text(`Fecha (ARG): ${fecha}`, marginX, cursorY);
   cursorY += 5;
   doc.text(`Sucursal: ${sucursal}`, marginX, cursorY);
   cursorY += 8;
 
-  // Caja cliente / datos principales
+  // Caja cliente / datos principales (altura dinámica por dirección + ciudad)
   const boxTop = cursorY;
   const boxPadding = 3;
-  const boxHeight = 40;
+
+  const cliente = ticket.cliente || "-";
+  const nroCliente = ticket.nroCliente || "-";
+  const telefono = ticket.telefono || "-";
+  const direccion = ticket.direccion || "-";
+  const ciudad = ticket.ciudad || "-";
+
+  const direccionLines = doc.splitTextToSize(`Dirección: ${direccion}`, innerWidth - 6);
+  const ciudadLines = doc.splitTextToSize(`Ciudad: ${ciudad}`, innerWidth - 6);
+
+  const lineH = 4.5;
+  const baseBoxHeight = 18; // cliente + nro/tel + pequeños espacios
+  let boxHeight = baseBoxHeight + direccionLines.length * lineH + ciudadLines.length * lineH + 6;
+
+  // un poco de control por si se hace enorme
+  boxHeight = Math.min(Math.max(boxHeight, 42), 62);
 
   doc.setDrawColor(190);
   doc.setLineWidth(0.3);
-  doc.roundedRect(
-    marginX,
-    boxTop,
-    innerWidth,
-    boxHeight,
-    2,
-    2
-  );
+  doc.roundedRect(marginX, boxTop, innerWidth, boxHeight, 2, 2);
 
   cursorY += boxPadding + 3;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(20);
-
-  const cliente = ticket.cliente || "-";
-  const nroCliente = ticket.nroCliente || "-";
-  const telefono = ticket.telefono || "-";
-
   doc.text(`Cliente: ${cliente}`, marginX + 3, cursorY);
 
   cursorY += 5;
@@ -1274,18 +1642,13 @@ function drawTicketSection(doc, opts) {
   doc.setTextColor(70);
 
   doc.text(`N° de cliente: ${nroCliente}`, marginX + 3, cursorY);
-  doc.text(`Teléfono: ${telefono}`, marginX + innerWidth / 2, cursorY, {
-    align: "right"
-  });
+  doc.text(`Teléfono: ${telefono}`, marginX + innerWidth - 3, cursorY, { align: "right" });
 
   cursorY += 5;
-
-  const direccion = ticket.direccion || "-";
-  const direccionLines = doc.splitTextToSize(
-    `Dirección: ${direccion}`,
-    innerWidth - 6
-  );
   doc.text(direccionLines, marginX + 3, cursorY);
+  cursorY += direccionLines.length * lineH;
+
+  doc.text(ciudadLines, marginX + 3, cursorY);
 
   cursorY = boxTop + boxHeight + 6;
 
@@ -1332,20 +1695,13 @@ function drawTicketSection(doc, opts) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(120);
-  doc.text(
-    "Este comprobante fue generado desde el sistema SNP Novogar.",
-    marginX,
-    footerY
-  );
+  doc.text("Este comprobante fue generado desde el sistema SNP Novogar.", marginX, footerY);
 }
 
 async function generateTicketPdf(ticket) {
   const jspdfLib = window.jspdf;
   if (!jspdfLib || !jspdfLib.jsPDF) {
-    showSwalError(
-      "PDF no disponible",
-      "No se pudo cargar el generador de PDF (jsPDF)."
-    );
+    showSwalError("PDF no disponible", "No se pudo cargar el generador de PDF (jsPDF).");
     return;
   }
 
@@ -1401,7 +1757,6 @@ async function generateTicketPdf(ticket) {
 }
 
 // Cartel "Imprimir comprobante"
-
 function showPrintBanner(firebaseKey) {
   const banner = document.getElementById("print-ticket-banner");
   if (!banner) return;
@@ -1421,10 +1776,13 @@ function hidePrintBanner() {
 // =======================
 // DOM + eventos
 // =======================
-
 document.addEventListener("DOMContentLoaded", () => {
   initSplash();
   initSkuSection();
+  initCityAutocomplete();
+
+  // click global para cerrar suggestions (SKU + Ciudad)
+  document.addEventListener("click", handleGlobalClickForAllSuggestions);
 
   const form = document.getElementById("snp-form");
 
@@ -1491,8 +1849,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (historyNextBtn) {
     historyNextBtn.addEventListener("click", () => {
-      const totalPages =
-        Math.ceil(filteredTickets.length / HISTORY_PAGE_SIZE) || 1;
+      const totalPages = Math.ceil(filteredTickets.length / HISTORY_PAGE_SIZE) || 1;
       if (currentHistoryPage < totalPages) {
         currentHistoryPage += 1;
         renderHistoryPage();
@@ -1523,19 +1880,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const tickets = await fetchAllTickets();
         const ticket = tickets.find((t) => t.firebaseKey === firebaseKey);
         if (!ticket) {
-          showSwalError(
-            "Ticket no encontrado",
-            "No se encontró el ticket en el historial."
-          );
+          showSwalError("Ticket no encontrado", "No se encontró el ticket en el historial.");
           return;
         }
         await generateTicketPdf(ticket);
       } catch (err) {
         console.error("Error al generar PDF del comprobante:", err);
-        showSwalError(
-          "Error al generar PDF",
-          "Ocurrió un error al generar el PDF del comprobante."
-        );
+        showSwalError("Error al generar PDF", "Ocurrió un error al generar el PDF del comprobante.");
       }
     });
   }
@@ -1552,24 +1903,32 @@ document.addEventListener("DOMContentLoaded", () => {
       const sucursalSelect = document.getElementById("sucursal");
       const clienteInput = document.getElementById("cliente");
       const direccionInput = document.getElementById("direccion");
+      const ciudadInput = document.getElementById("ciudad"); // ✅ NUEVO
       const telefonoInput = document.getElementById("telefono");
       const nroClienteInput = document.getElementById("nroCliente");
       const fechaCompraInput = document.getElementById("fechaCompra");
 
       try {
         if (
-          !sucursalSelect.value ||
-          !clienteInput.value.trim() ||
-          !direccionInput.value.trim() ||
-          !telefonoInput.value.trim() ||
-          !nroClienteInput.value.trim() ||
-          !fechaCompraInput.value
+          !sucursalSelect?.value ||
+          !clienteInput?.value.trim() ||
+          !direccionInput?.value.trim() ||
+          !ciudadInput?.value.trim() ||
+          !telefonoInput?.value.trim() ||
+          !nroClienteInput?.value.trim() ||
+          !fechaCompraInput?.value
         ) {
           throw new Error("Completá todos los campos del formulario.");
         }
 
-        const { productoCompuesto, fallaCompuesta } =
-          collectSkuAndFallasFromForm();
+        // ✅ ciudad obligatoria por selección
+        if (!cityState.selected) {
+          throw new Error(
+            "Seleccioná una Ciudad / Localidad desde las sugerencias (buscá por CP o nombre)."
+          );
+        }
+
+        const { productoCompuesto, fallaCompuesta } = collectSkuAndFallasFromForm();
 
         if (!productoCompuesto || !fallaCompuesta) {
           throw new Error(
@@ -1577,15 +1936,14 @@ document.addEventListener("DOMContentLoaded", () => {
           );
         }
 
-        const opt =
-          sucursalSelect.options[sucursalSelect.selectedIndex];
+        const opt = sucursalSelect.options[sucursalSelect.selectedIndex];
         const sucursal = opt.value;
-        const sucursalGerenteEmail =
-          (opt.getAttribute("data-gerente-email") || "").trim();
-        const sucursalGerenteNombre =
-          opt.getAttribute("data-gerente-nombre") || "";
+        const sucursalGerenteEmail = (opt.getAttribute("data-gerente-email") || "").trim();
+        const sucursalGerenteNombre = opt.getAttribute("data-gerente-nombre") || "";
 
         const { firebaseKey, display, iso } = getArgentinaDateInfo();
+
+        const ciudadLabel = buildCiudadLabel(cityState.selected);
 
         const ticketData = {
           sucursal,
@@ -1594,6 +1952,11 @@ document.addEventListener("DOMContentLoaded", () => {
           cliente: clienteInput.value.trim().toUpperCase(),
           nroCliente: nroClienteInput.value.trim().toUpperCase(),
           direccion: direccionInput.value.trim().toUpperCase(),
+          ciudad: ciudadLabel, // ✅ NUEVO (CP · LOCALIDAD · PROVINCIA)
+          ciudadId: cityState.selected?.id || "",
+          ciudadCp: cityState.selected?.cpPrimary || "",
+          ciudadLocalidad: cityState.selected?.localidad || "",
+          ciudadProvincia: cityState.selected?.provincia || "",
           telefono: telefonoInput.value.trim(),
           producto: productoCompuesto,
           falla: fallaCompuesta,
@@ -1606,9 +1969,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         addOverlayStep("Guardando ticket en Firebase SNP…");
-        const saveResult = await guardarTicketEnFirebase({
-          ...ticketData
-        });
+        const saveResult = await guardarTicketEnFirebase({ ...ticketData });
         const savedKey = saveResult?.key || firebaseKey;
         ticketData.firebaseKey = savedKey;
 
@@ -1617,16 +1978,10 @@ document.addEventListener("DOMContentLoaded", () => {
         addOverlayStep("Registrando ticket en Google Sheets…");
         try {
           await registrarTicketEnSheet(ticketData);
-          addOverlayStep(
-            "✔ Se envió el registro a Google Sheets.",
-            "ok"
-          );
+          addOverlayStep("✔ Se envió el registro a Google Sheets.", "ok");
         } catch (sheetError) {
           console.error(sheetError);
-          addOverlayStep(
-            "No se pudo registrar el ticket en Sheets.",
-            "error"
-          );
+          addOverlayStep("No se pudo registrar el ticket en Sheets.", "error");
         }
 
         const commonEmailData = {
@@ -1636,6 +1991,7 @@ document.addEventListener("DOMContentLoaded", () => {
           cliente: ticketData.cliente,
           nroCliente: ticketData.nroCliente,
           direccion: ticketData.direccion,
+          ciudad: ticketData.ciudad, // ✅ NUEVO
           telefono: ticketData.telefono,
           producto: ticketData.producto,
           falla: ticketData.falla,
@@ -1645,22 +2001,15 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         // Armamos sujetos incluyendo nro de cliente si existe
-        const nroCliTag = ticketData.nroCliente
-          ? ` · Cliente N° ${ticketData.nroCliente}`
-          : "";
+        const nroCliTag = ticketData.nroCliente ? ` · Cliente N° ${ticketData.nroCliente}` : "";
 
         const subjectGerente = `Copia de ticket a SNP${nroCliTag}`;
         const subjectSnp = `Nuevo ticket SNP · ${ticketData.sucursal}${nroCliTag}`;
 
         // 1) Gerente
         if (ticketData.sucursalGerenteEmail) {
-          addOverlayStep(
-            `Enviando copia al gerente (${ticketData.sucursalGerenteEmail})…`
-          );
-          const htmlGerente = buildTicketEmailHtml(
-            commonEmailData,
-            "gerente"
-          );
+          addOverlayStep(`Enviando copia al gerente (${ticketData.sucursalGerenteEmail})…`);
+          const htmlGerente = buildTicketEmailHtml(commonEmailData, "gerente");
           const rGerente = await sendEmailSnp({
             toName: ticketData.sucursalGerenteNombre,
             toEmail: ticketData.sucursalGerenteEmail,
@@ -1670,10 +2019,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (rGerente.ok) {
             addOverlayStep("✔ Copia enviada al gerente.", "ok");
           } else {
-            addOverlayStep(
-              "No se pudo enviar la copia al gerente.",
-              "error"
-            );
+            addOverlayStep("No se pudo enviar la copia al gerente.", "error");
           }
         }
 
@@ -1733,8 +2079,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // Mostramos cartel para imprimir comprobante
         showPrintBanner(ticketData.firebaseKey);
 
-        // Reseteamos formulario y dejamos solo 1 SKU limpio
+        // Reseteamos formulario y dejamos solo 1 SKU limpio + reset ciudad
         form.reset();
+        setSelectedCityInForm(null);
+
         const skuListEl = document.getElementById("sku-list");
         if (skuListEl) {
           skuListEl.innerHTML = "";
@@ -1744,14 +2092,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         console.error(err);
-        addOverlayStep(
-          "Ocurrió un error general al procesar el ticket.",
-          "error"
-        );
-        showStatus(
-          err?.message || "Ocurrió un error al enviar el ticket.",
-          "error"
-        );
+        addOverlayStep("Ocurrió un error general al procesar el ticket.", "error");
+        showStatus(err?.message || "Ocurrió un error al enviar el ticket.", "error");
       } finally {
         setFormLoading(false);
       }
@@ -1762,7 +2104,6 @@ document.addEventListener("DOMContentLoaded", () => {
 // =======================
 // Constantes
 // =======================
-
 const FIREBASE_SNP_BASE_URL =
   "https://snp-novogar-default-rtdb.asia-southeast1.firebasedatabase.app";
 

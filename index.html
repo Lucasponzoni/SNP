@@ -253,6 +253,37 @@
               />
             </div>
 
+            <!-- Ciudad / Localidad con autocomplete -->
+            <div class="form-row">
+              <label for="ciudad">Ciudad / Localidad</label>
+
+              <div class="product-input-wrapper city-input-wrapper">
+                <input
+                  type="text"
+                  id="ciudad"
+                  name="ciudad"
+                  class="form-control uppercase-input city-input"
+                  placeholder="Buscá por CP o localidad (ej: 5000 o CÓRDOBA)"
+                  autocomplete="off"
+                  required
+                />
+                <ul
+                  id="ciudad-suggestions"
+                  class="suggestions hidden list-unstyled city-suggestions"
+                ></ul>
+              </div>
+
+              <small class="hint">
+                Escribí un <b>CP</b> o el nombre de la <b>localidad</b> y seleccioná una sugerencia.
+              </small>
+
+              <!-- (Opcional pero recomendado) campos ocultos para guardar la selección “limpia” -->
+              <input type="hidden" id="ciudadId" name="ciudadId" />
+              <input type="hidden" id="ciudadCp" name="ciudadCp" />
+              <input type="hidden" id="ciudadLocalidad" name="ciudadLocalidad" />
+              <input type="hidden" id="ciudadProvincia" name="ciudadProvincia" />
+            </div>
+
             <div class="form-row">
               <label for="telefono">Teléfono</label>
               <input
@@ -480,6 +511,8 @@
     src="https://cdn.jsdelivr.net/npm/sweetalert2@11"
     defer
   ></script>
+
+  <script src="ciudades.js" defer></script>
 
   <!-- Tu lógica principal -->
   <script src="app.js" defer></script>
