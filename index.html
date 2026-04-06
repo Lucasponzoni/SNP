@@ -504,7 +504,8 @@
               <input id="branch-name-input" class="form-control" type="text" placeholder="Sucursal (ej: Novogar Rosario Centro)" required />
               <input id="branch-manager-input" class="form-control" type="text" placeholder="Nombre de gerente" required />
               <input id="branch-email-input" class="form-control" type="email" placeholder="Email de gerente" required />
-              <input id="branch-submanagers-input" class="form-control" type="text" placeholder="Subgerentes: Nombre <email>, Nombre2 <email2> (opcional)" />
+              <input id="branch-submanager-names-input" class="form-control" type="text" placeholder="Subgerentes (nombres, separados por coma)" />
+              <input id="branch-submanager-emails-input" class="form-control" type="text" placeholder="Subgerentes (emails, separados por coma)" />
               <button type="submit" class="btn btn-sm btn-primary-macos">
                 <i class="bi bi-plus-circle me-1"></i>
                 Guardar sucursal
@@ -516,7 +517,8 @@
             <span>Sucursal</span>
             <span>Gerente</span>
             <span>Email gerente</span>
-            <span>Subgerentes (nombre + email)</span>
+            <span>Subgerentes (nombres)</span>
+            <span>Subgerentes (emails)</span>
             <span>Acciones</span>
           </div>
           <div id="branches-list" class="branches-list"></div>
@@ -582,7 +584,18 @@
                 <option value="polarArea">Área polar</option>
               </select>
             </div>
+            <div class="chart-type-item">
+              <label for="charts-top-limit" class="form-label mb-1">Top de SKU</label>
+              <select id="charts-top-limit" class="form-select form-select-sm">
+                <option value="5">Top 5</option>
+                <option value="10" selected>Top 10</option>
+                <option value="15">Top 15</option>
+                <option value="20">Top 20</option>
+              </select>
+            </div>
           </div>
+
+          <div id="charts-summary" class="charts-summary mb-3"></div>
 
           <div class="charts-grid">
             <div class="chart-card">
@@ -595,6 +608,12 @@
               <h3>Ranking de SKU</h3>
               <div class="chart-canvas-wrap">
                 <canvas id="sku-ranking-chart"></canvas>
+              </div>
+            </div>
+            <div class="chart-card">
+              <h3>Evolución diaria de reclamos</h3>
+              <div class="chart-canvas-wrap">
+                <canvas id="claims-trend-chart"></canvas>
               </div>
             </div>
           </div>
@@ -612,6 +631,7 @@
         <span>Se guardó en SNP y se enviaron las notificaciones.</span>
       </div>
     </div>
+    <div id="desktop-top-branches-toast" class="desktop-branches-toast hidden" aria-live="polite"></div>
 
     <!-- Overlay de envío -->
     <div id="overlay-loading" class="overlay hidden">
