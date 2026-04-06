@@ -2199,6 +2199,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (chartsDateRangeInput && window.flatpickr) {
+    flatpickr(chartsDateRangeInput, {
+      mode: "range",
+      dateFormat: "Y-m-d",
+      locale: window.flatpickr?.l10ns?.es || "es",
+      onClose: (selectedDates) => {
+        const from = selectedDates[0] || null;
+        const toBase = selectedDates[1] || selectedDates[0] || null;
+        const to = toBase ? new Date(toBase) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+        chartDateRange = {
+          from,
+          to
+        };
+      }
+    });
+  }
+
   if (navNew) {
     navNew.addEventListener("click", () => setActiveView("form"));
   }
