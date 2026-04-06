@@ -103,6 +103,155 @@ function showSwalError(title, text) {
   }
 }
 
+function toCapitalizedText(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("es-AR")
+    .replace(/\b(\p{L})/gu, (m) => m.toLocaleUpperCase("es-AR"));
+}
+
+const BRANCHES_STORAGE_KEY = "snp_custom_branches_v1";
+let branchesState = [];
+let editingBranchId = null;
+let claimsByBranchChart = null;
+let skuRankingChart = null;
+let chartDateRange = { from: null, to: null };
+
+function createBranchId() {
+  return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function getInitialBranchesFromSelect() {
+  const select = document.getElementById("sucursal");
+  if (!select) return [];
+
+  return Array.from(select.options)
+    .filter((opt) => opt.value)
+    .map((opt) => ({
+      id: createBranchId(),
+      name: String(opt.value || "").trim(),
+      managerName: String(opt.getAttribute("data-gerente-nombre") || "").trim(),
+      managerEmail: String(opt.getAttribute("data-gerente-email") || "").trim()
+    }));
+}
+
+function saveBranches() {
+  localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branchesState));
+}
+
+function loadBranches() {
+  const raw = localStorage.getItem(BRANCHES_STORAGE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        branchesState = parsed;
+        return;
+      }
+    } catch (err) {
+      console.warn("No se pudo parsear sucursales guardadas:", err);
+    }
+  }
+
+  branchesState = getInitialBranchesFromSelect();
+  saveBranches();
+}
+
+function renderBranchesInSelects() {
+  const sucursalSelect = document.getElementById("sucursal");
+  const chartsFilter = document.getElementById("charts-branch-filter");
+
+  if (sucursalSelect) {
+    const current = sucursalSelect.value;
+    sucursalSelect.innerHTML = '<option value="">Seleccioná una sucursal…</option>';
+
+    branchesState.forEach((branch) => {
+      const option = document.createElement("option");
+      option.value = branch.name;
+      option.textContent = toCapitalizedText(branch.name);
+      option.setAttribute("data-gerente-nombre", toCapitalizedText(branch.managerName));
+      option.setAttribute("data-gerente-email", String(branch.managerEmail || "").trim().toLowerCase());
+      sucursalSelect.appendChild(option);
+    });
+
+    if (current && Array.from(sucursalSelect.options).some((o) => o.value === current)) {
+      sucursalSelect.value = current;
+    }
+  }
+
+  if (chartsFilter) {
+    const previouslySelected = new Set(
+      Array.from(chartsFilter.selectedOptions || []).map((o) => o.value)
+    );
+    chartsFilter.innerHTML = "";
+    branchesState.forEach((branch) => {
+      const option = document.createElement("option");
+      option.value = branch.name;
+      option.textContent = toCapitalizedText(branch.name);
+      if (previouslySelected.has(branch.name)) option.selected = true;
+      chartsFilter.appendChild(option);
+    });
+  }
+}
+
+function renderBranchesAdmin() {
+  const list = document.getElementById("branches-list");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  branchesState.forEach((branch) => {
+    const card = document.createElement("article");
+    card.className = "branch-card";
+    card.dataset.id = branch.id;
+    card.innerHTML = `
+      <div class="branch-fields">
+        <input type="text" class="form-control capitalize-text" data-field="name" value="${toCapitalizedText(branch.name)}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="managerName" value="${toCapitalizedText(branch.managerName)}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="managerEmail" value="${String(branch.managerEmail || "").trim().toLowerCase()}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <div class="d-flex gap-1">
+          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="${editingBranchId === branch.id ? "save" : "edit"}">
+            <i class="bi bi-${editingBranchId === branch.id ? "check2" : "pencil"}"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="delete">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function upsertBranch(payload) {
+  const name = toCapitalizedText(payload.name);
+  const managerName = toCapitalizedText(payload.managerName);
+  const managerEmail = String(payload.managerEmail || "").trim().toLowerCase();
+  if (!name || !managerName || !managerEmail) {
+    throw new Error("Completá nombre de sucursal, gerente y email.");
+  }
+
+  if (payload.id) {
+    branchesState = branchesState.map((b) =>
+      b.id === payload.id ? { ...b, name, managerName, managerEmail } : b
+    );
+  } else {
+    branchesState.push({ id: createBranchId(), name, managerName, managerEmail });
+  }
+
+  branchesState.sort((a, b) => a.name.localeCompare(b.name, "es"));
+  saveBranches();
+  renderBranchesInSelects();
+  renderBranchesAdmin();
+}
+
+function deleteBranch(branchId) {
+  branchesState = branchesState.filter((b) => b.id !== branchId);
+  saveBranches();
+  renderBranchesInSelects();
+  renderBranchesAdmin();
+}
+
 // =======================
 // Productos (autocomplete)
 // =======================
@@ -1484,6 +1633,110 @@ function renderHistoryPage() {
   if (nextBtn) nextBtn.disabled = currentHistoryPage >= totalPages;
 }
 
+function parseDateFromTicket(ticket) {
+  if (ticket?.createdAtIso) {
+    const parsed = new Date(ticket.createdAtIso);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function ticketMatchesChartFilters(ticket, selectedBranches) {
+  if (selectedBranches.length && !selectedBranches.includes(ticket.sucursal)) {
+    return false;
+  }
+
+  if (chartDateRange.from || chartDateRange.to) {
+    const ticketDate = parseDateFromTicket(ticket);
+    if (!ticketDate) return false;
+    if (chartDateRange.from && ticketDate < chartDateRange.from) return false;
+    if (chartDateRange.to && ticketDate > chartDateRange.to) return false;
+  }
+
+  return true;
+}
+
+function destroyChartsIfNeeded() {
+  if (claimsByBranchChart) {
+    claimsByBranchChart.destroy();
+    claimsByBranchChart = null;
+  }
+  if (skuRankingChart) {
+    skuRankingChart.destroy();
+    skuRankingChart = null;
+  }
+}
+
+async function renderChartsView() {
+  const branchSelect = document.getElementById("charts-branch-filter");
+  const claimsCanvas = document.getElementById("claims-by-branch-chart");
+  const skuCanvas = document.getElementById("sku-ranking-chart");
+  if (!branchSelect || !claimsCanvas || !skuCanvas || !window.Chart) return;
+
+  const selectedBranches = Array.from(branchSelect.selectedOptions).map((o) => o.value);
+  const tickets = await fetchAllTickets();
+  const filtered = tickets.filter((t) => ticketMatchesChartFilters(t, selectedBranches));
+
+  const claimsMap = new Map();
+  const skuMap = new Map();
+
+  filtered.forEach((t) => {
+    const branchKey = t.sucursal || "Sin sucursal";
+    claimsMap.set(branchKey, (claimsMap.get(branchKey) || 0) + 1);
+
+    const skus = String(t.producto || "")
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+    skus.forEach((sku) => skuMap.set(sku, (skuMap.get(sku) || 0) + 1));
+  });
+
+  const claimsRows = Array.from(claimsMap.entries()).sort((a, b) => b[1] - a[1]);
+  const skuRows = Array.from(skuMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  destroyChartsIfNeeded();
+
+  claimsByBranchChart = new Chart(claimsCanvas, {
+    type: "bar",
+    data: {
+      labels: claimsRows.map(([name]) => toCapitalizedText(name)),
+      datasets: [
+        {
+          label: "Reclamos",
+          data: claimsRows.map(([, count]) => count),
+          backgroundColor: "rgba(59, 130, 246, 0.55)",
+          borderColor: "rgba(37, 99, 235, 1)",
+          borderWidth: 1
+        }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  skuRankingChart = new Chart(skuCanvas, {
+    type: "bar",
+    data: {
+      labels: skuRows.map(([sku]) => sku),
+      datasets: [
+        {
+          label: "Cantidad",
+          data: skuRows.map(([, count]) => count),
+          backgroundColor: "rgba(16, 185, 129, 0.55)",
+          borderColor: "rgba(5, 150, 105, 1)",
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+}
+
 async function handleReprintTicket(firebaseKey) {
   try {
     const tickets = await fetchAllTickets();
@@ -1788,34 +2041,74 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const navNew = document.getElementById("nav-new-ticket");
   const navHistory = document.getElementById("nav-history");
+  const navBranches = document.getElementById("nav-branches");
+  const navCharts = document.getElementById("nav-charts");
   const viewForm = document.getElementById("view-form");
   const viewHistory = document.getElementById("view-history");
+  const viewBranches = document.getElementById("view-branches");
+  const viewCharts = document.getElementById("view-charts");
 
   const searchHistoryInput = document.getElementById("history-search-input");
   const historyPrevBtn = document.getElementById("history-prev-btn");
   const historyNextBtn = document.getElementById("history-next-btn");
   const historyListEl = document.getElementById("history-list");
   const refreshHistoryBtn = document.getElementById("refresh-history-btn");
+  const branchForm = document.getElementById("branch-form");
+  const branchesList = document.getElementById("branches-list");
+  const chartsApplyBtn = document.getElementById("charts-apply-btn");
+  const chartsDateRangeInput = document.getElementById("charts-date-range");
+  const chartsBranchFilter = document.getElementById("charts-branch-filter");
 
   const printTicketBtn = document.getElementById("print-ticket-btn");
 
+  loadBranches();
+  renderBranchesInSelects();
+  renderBranchesAdmin();
+
   function setActiveView(view) {
-    if (!viewForm || !viewHistory) return;
+    [viewForm, viewHistory, viewBranches, viewCharts].forEach((v) => v?.classList.remove("active"));
+    [navNew, navHistory, navBranches, navCharts].forEach((n) => n?.classList.remove("active"));
 
     if (view === "form") {
-      viewForm.classList.add("active");
-      viewHistory.classList.remove("active");
+      viewForm?.classList.add("active");
       navNew?.classList.add("active");
-      navHistory?.classList.remove("active");
-    } else {
-      viewHistory.classList.add("active");
-      viewForm.classList.remove("active");
-      navHistory?.classList.add("active");
-      navNew?.classList.remove("active");
-
-      // Cargamos historial al entrar
-      loadAndRenderTickets();
+      return;
     }
+    if (view === "history") {
+      viewHistory?.classList.add("active");
+      navHistory?.classList.add("active");
+      loadAndRenderTickets();
+      return;
+    }
+    if (view === "branches") {
+      viewBranches?.classList.add("active");
+      navBranches?.classList.add("active");
+      renderBranchesAdmin();
+      return;
+    }
+    if (view === "charts") {
+      viewCharts?.classList.add("active");
+      navCharts?.classList.add("active");
+      renderChartsView();
+    }
+  }
+
+  if (chartsDateRangeInput && window.flatpickr) {
+    flatpickr(chartsDateRangeInput, {
+      mode: "range",
+      dateFormat: "Y-m-d",
+      locale: window.flatpickr?.l10ns?.es || "es",
+      onClose: (selectedDates) => {
+        const from = selectedDates[0] || null;
+        const toBase = selectedDates[1] || selectedDates[0] || null;
+        const to = toBase ? new Date(toBase) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+        chartDateRange = {
+          from,
+          to
+        };
+      }
+    });
   }
 
   if (navNew) {
@@ -1825,11 +2118,75 @@ document.addEventListener("DOMContentLoaded", () => {
   if (navHistory) {
     navHistory.addEventListener("click", () => setActiveView("history"));
   }
+  if (navBranches) {
+    navBranches.addEventListener("click", () => setActiveView("branches"));
+  }
+  if (navCharts) {
+    navCharts.addEventListener("click", () => setActiveView("charts"));
+  }
 
   if (refreshHistoryBtn) {
     refreshHistoryBtn.addEventListener("click", () =>
       loadAndRenderTickets({ forceReload: true })
     );
+  }
+
+  if (chartsApplyBtn) {
+    chartsApplyBtn.addEventListener("click", () => renderChartsView());
+  }
+  if (chartsBranchFilter) {
+    chartsBranchFilter.addEventListener("change", () => renderChartsView());
+  }
+
+  if (branchForm) {
+    branchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = document.getElementById("branch-name-input")?.value || "";
+      const managerName = document.getElementById("branch-manager-input")?.value || "";
+      const managerEmail = document.getElementById("branch-email-input")?.value || "";
+
+      try {
+        upsertBranch({ name, managerName, managerEmail });
+        branchForm.reset();
+        editingBranchId = null;
+      } catch (err) {
+        showSwalError("No se pudo guardar", err?.message || "Revisá los datos.");
+      }
+    });
+  }
+
+  if (branchesList) {
+    branchesList.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest("[data-action]");
+      if (!actionBtn) return;
+      const card = e.target.closest(".branch-card");
+      const branchId = card?.dataset?.id;
+      if (!branchId) return;
+
+      const action = actionBtn.dataset.action;
+      if (action === "edit") {
+        editingBranchId = branchId;
+        renderBranchesAdmin();
+        return;
+      }
+      if (action === "delete") {
+        deleteBranch(branchId);
+        renderChartsView();
+        return;
+      }
+      if (action === "save") {
+        const name = card.querySelector('[data-field="name"]')?.value || "";
+        const managerName = card.querySelector('[data-field="managerName"]')?.value || "";
+        const managerEmail = card.querySelector('[data-field="managerEmail"]')?.value || "";
+        try {
+          upsertBranch({ id: branchId, name, managerName, managerEmail });
+          editingBranchId = null;
+          renderChartsView();
+        } catch (err) {
+          showSwalError("No se pudo actualizar", err?.message || "Revisá los datos.");
+        }
+      }
+    });
   }
 
   if (searchHistoryInput) {
