@@ -137,6 +137,21 @@ function createBranchId() {
   return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function getBranchesFirebaseUrl() {
+  return `${FIREBASE_SNP_BASE_URL}/branches.json`;
+}
+
+function normalizeBranchesPayload(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    id: item?.id || createBranchId(),
+    name: String(item?.name || "").trim(),
+    managerName: String(item?.managerName || "").trim(),
+    managerEmail: String(item?.managerEmail || "").trim().toLowerCase(),
+    subManagers: parseSubmanagerEntries(item?.subManagers || item?.subManagerEmails || [])
+  }));
+}
+
 function parseSubmanagerEntries(raw) {
   const fromString = String(raw || "")
     .split(",")
@@ -236,20 +251,44 @@ function getInitialBranchesFromSelect() {
 
 function saveBranches() {
   localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branchesState));
+  syncBranchesToFirebase(branchesState);
 }
 
-function loadBranches() {
+async function syncBranchesToFirebase(branches) {
+  try {
+    await fetch(getBranchesFirebaseUrl(), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(branches)
+    });
+  } catch (err) {
+    console.warn("No se pudieron sincronizar sucursales en Firebase:", err);
+  }
+}
+
+async function loadBranches() {
+  try {
+    const res = await fetch(getBranchesFirebaseUrl());
+    if (res.ok) {
+      const remote = await res.json();
+      const normalizedRemote = normalizeBranchesPayload(remote);
+      if (normalizedRemote.length) {
+        branchesState = normalizedRemote;
+        localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branchesState));
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("No se pudieron cargar sucursales desde Firebase:", err);
+  }
+
   const raw = localStorage.getItem(BRANCHES_STORAGE_KEY);
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) {
-        branchesState = parsed.map((item) => ({
-          ...item,
-          subManagers: parseSubmanagerEntries(
-            item?.subManagers || item?.subManagerEmails || []
-          )
-        }));
+      const normalizedLocal = normalizeBranchesPayload(parsed);
+      if (normalizedLocal.length) {
+        branchesState = normalizedLocal;
         return;
       }
     } catch (err) {
@@ -351,15 +390,15 @@ function renderBranchesAdmin() {
       <div class="branch-fields">
         <div class="branch-main-row">
           <div class="branch-field">
-            <label>Sucursal</label>
+            <label><i class="bi bi-buildings me-1"></i>Sucursal</label>
             <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${isEditing ? "" : "disabled"} />
           </div>
           <div class="branch-field">
-            <label>Gerente</label>
+            <label><i class="bi bi-person-badge me-1"></i>Gerente</label>
             <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${isEditing ? "" : "disabled"} />
           </div>
           <div class="branch-field">
-            <label>Email gerente</label>
+            <label><i class="bi bi-envelope me-1"></i>Email gerente</label>
             <input type="text" class="form-control" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${isEditing ? "" : "disabled"} />
           </div>
           <div class="branch-actions">
@@ -373,11 +412,11 @@ function renderBranchesAdmin() {
         </div>
         <div class="branch-sub-row">
           <div class="branch-field">
-            <label>Subgerentes (nombres)</label>
+            <label><i class="bi bi-people me-1"></i>Subgerentes (nombres)</label>
             <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
           </div>
           <div class="branch-field">
-            <label>Subgerentes (emails)</label>
+            <label><i class="bi bi-envelope-paper me-1"></i>Subgerentes (emails)</label>
             <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
           </div>
         </div>
@@ -2404,7 +2443,7 @@ function hidePrintBanner() {
 // =======================
 // DOM + eventos
 // =======================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   initSplash();
   initSkuSection();
   initCityAutocomplete();
@@ -2443,7 +2482,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const printTicketBtn = document.getElementById("print-ticket-btn");
 
-  loadBranches();
+  await loadBranches();
   renderBranchesInSelects();
   renderBranchesAdmin();
 
@@ -2619,6 +2658,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (action === "edit") {
         editingBranchId = branchId;
         renderBranchesAdmin();
+        setTimeout(() => {
+          document
+            .querySelector(`.branch-card[data-id="${branchId}"] [data-field="name"]`)
+            ?.focus();
+        }, 0);
         return;
       }
       if (action === "delete") {
