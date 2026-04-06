@@ -1202,7 +1202,7 @@ function buildTicketEmailHtml(ticket, tipo) {
           background: #ffffff;
           border-radius: 18px;
           border: 1px solid #cbd5e1;
-          box-shadow: 0 22px 55px rgba(15, 23, 42, 0.16);
+          box-shadow: none;
           overflow: hidden;
         }
         .header {
