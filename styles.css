@@ -27,7 +27,7 @@ html {
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text",
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text",
     "Helvetica Neue", sans-serif;
   min-height: 100vh;   
   display: flex;
@@ -1265,8 +1265,11 @@ body::after {
 }
 
 .summary-card strong {
-  font-size: 13px;
+  font-size: 31px;
+  font-weight: 800;
+  line-height: 1.05;
   color: #1f2a62;
+  letter-spacing: -0.02em;
 }
 
 .desktop-branches-toast {
@@ -1445,4 +1448,227 @@ body::after {
   background: rgba(148, 163, 184, 0.45);
   border-radius: 999px;
   border: 3px solid rgba(255, 255, 255, 0.9);
+}
+
+/* ===========================
+   Refresh visual iOS Sonoma + mejoras solicitadas
+   =========================== */
+:root {
+  --bg-page: #d8e5fb;
+  --window-bg: rgba(255, 255, 255, 0.82);
+  --window-border: rgba(174, 193, 220, 0.45);
+  --window-shadow: 0 24px 64px rgba(8, 15, 37, 0.2);
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.1);
+}
+
+body::before {
+  background:
+    radial-gradient(circle at 8% 18%, rgba(167, 139, 250, 0.42), transparent 58%),
+    radial-gradient(circle at 84% 26%, rgba(56, 189, 248, 0.34), transparent 58%),
+    radial-gradient(circle at 24% 84%, rgba(244, 114, 182, 0.24), transparent 62%),
+    radial-gradient(circle at 92% 72%, rgba(34, 197, 94, 0.22), transparent 58%),
+    radial-gradient(circle at top, #dbeafe 0, #e0e7ff 42%, #dbeafe 100%);
+}
+
+.window {
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.16);
+}
+
+.window-header {
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.85), rgba(224, 231, 255, 0.72));
+}
+
+.window-nav-btn.active,
+.btn-primary-macos {
+  background: linear-gradient(135deg, #1d4ed8, #4338ca);
+  border-color: transparent;
+  color: #fff !important;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.32);
+}
+
+.branch-form {
+  border: 1px solid rgba(125, 147, 195, 0.4);
+  border-radius: 20px;
+  padding: 14px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(239, 246, 255, 0.72));
+}
+
+.branch-grid {
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr auto;
+  gap: 10px;
+}
+
+.branch-card {
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(237, 242, 255, 0.86));
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  box-shadow: 0 12px 24px rgba(36, 56, 99, 0.08) !important;
+  padding: 12px;
+}
+
+.branch-card .branch-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.branch-main-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.branch-sub-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.branch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.branch-field label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  margin: 0;
+}
+
+.branch-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  min-width: 230px;
+  justify-content: flex-end;
+}
+
+.branch-delete-btn {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.summary-card-highlight {
+  background: linear-gradient(140deg, rgba(37, 99, 235, 0.92), rgba(79, 70, 229, 0.95));
+  color: #eff6ff;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.summary-card-highlight span,
+.summary-card-highlight strong,
+.summary-card-highlight small {
+  color: inherit;
+}
+
+.summary-highlight-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.summary-card-highlight .summary-highlight-icon i {
+  color: #facc15;
+  text-shadow: 0 0 10px rgba(250, 204, 21, 0.45);
+}
+
+.summary-highlight-branch {
+  margin-top: 6px;
+  font-size: 14px !important;
+  font-weight: 700;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.summary-card-highlight small {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.desktop-branches-toast {
+  top: auto;
+  right: 22px;
+  bottom: 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.4);
+  background: linear-gradient(160deg, rgba(35, 53, 97, 0.96), rgba(27, 85, 145, 0.94) 55%, rgba(30, 64, 175, 0.92));
+  padding: 16px 14px 12px;
+  transform: translate(12px, 12px);
+}
+
+.desktop-branches-toast.visible {
+  transform: translate(0, 0);
+}
+
+.desktop-branches-toast-title-main {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.desktop-branches-toast-title small {
+  display: block;
+  font-size: 11px;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+.desktop-branches-toast-list li {
+  align-items: center;
+}
+
+.desktop-branches-toast-list li strong {
+  min-width: 34px;
+  padding: 2px 10px;
+}
+
+.rank-trophy {
+  margin-right: 4px;
+}
+
+.rank-1 {
+  color: #facc15;
+  text-shadow: 0 0 12px rgba(250, 204, 21, 0.55);
+}
+
+.rank-2 {
+  color: #d1d5db;
+  text-shadow: 0 0 10px rgba(209, 213, 219, 0.5);
+}
+
+.rank-3 {
+  color: #d97706;
+  text-shadow: 0 0 10px rgba(217, 119, 6, 0.5);
+}
+
+@media (max-width: 768px) {
+  .branch-grid,
+  .branch-main-row,
+  .branch-sub-row {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-actions {
+    min-width: 0;
+    justify-content: stretch;
+  }
+
+  .branch-actions .btn {
+    width: 100%;
+  }
 }
