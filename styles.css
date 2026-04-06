@@ -1680,7 +1680,8 @@ body::before {
 
 .summary-card-highlight {
   padding: 14px 16px;
-  min-height: 215px;
+  min-height: 0;
+  gap: 8px;
 }
 
 .summary-card-highlight .summary-highlight-branch {
@@ -1690,9 +1691,28 @@ body::before {
 }
 
 .summary-card-highlight small {
-  font-size: 42px;
-  line-height: 0.95;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.summary-highlight-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.summary-highlight-count b {
+  font-size: 40px;
+  line-height: 0.9;
+  font-weight: 800;
   letter-spacing: -0.03em;
+  color: #eff6ff;
+}
+
+.summary-highlight-count small {
+  opacity: 0.94;
 }
 
 .desktop-branches-toast {

@@ -2014,7 +2014,10 @@ async function renderChartsView() {
         <span class="summary-highlight-icon"><i class="bi bi-trophy-fill"></i></span>
         <span>Mayor volumen</span>
         <strong class="summary-highlight-branch" title="${escapeHtml(branchWithMostClaims[0])}">${escapeHtml(branchWithMostClaims[0])}</strong>
-        <small>${branchWithMostClaims[1]} reclamo(s)</small>
+        <div class="summary-highlight-count">
+          <b>${branchWithMostClaims[1]}</b>
+          <small>reclamo(s)</small>
+        </div>
       </article>
     `;
   }
