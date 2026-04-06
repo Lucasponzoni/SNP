@@ -130,9 +130,26 @@ let claimsByBranchChart = null;
 let skuRankingChart = null;
 let claimsTrendChart = null;
 let chartDateRange = { from: null, to: null };
+let chartsDatePicker = null;
+let branchSearchTerm = "";
 
 function createBranchId() {
   return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function getBranchesFirebaseUrl() {
+  return `${FIREBASE_SNP_BASE_URL}/branches.json`;
+}
+
+function normalizeBranchesPayload(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    id: item?.id || createBranchId(),
+    name: String(item?.name || "").trim(),
+    managerName: String(item?.managerName || "").trim(),
+    managerEmail: String(item?.managerEmail || "").trim().toLowerCase(),
+    subManagers: parseSubmanagerEntries(item?.subManagers || item?.subManagerEmails || [])
+  }));
 }
 
 function parseSubmanagerEntries(raw) {
@@ -234,20 +251,44 @@ function getInitialBranchesFromSelect() {
 
 function saveBranches() {
   localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branchesState));
+  syncBranchesToFirebase(branchesState);
 }
 
-function loadBranches() {
+async function syncBranchesToFirebase(branches) {
+  try {
+    await fetch(getBranchesFirebaseUrl(), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(branches)
+    });
+  } catch (err) {
+    console.warn("No se pudieron sincronizar sucursales en Firebase:", err);
+  }
+}
+
+async function loadBranches() {
+  try {
+    const res = await fetch(getBranchesFirebaseUrl());
+    if (res.ok) {
+      const remote = await res.json();
+      const normalizedRemote = normalizeBranchesPayload(remote);
+      if (normalizedRemote.length) {
+        branchesState = normalizedRemote;
+        localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branchesState));
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("No se pudieron cargar sucursales desde Firebase:", err);
+  }
+
   const raw = localStorage.getItem(BRANCHES_STORAGE_KEY);
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) {
-        branchesState = parsed.map((item) => ({
-          ...item,
-          subManagers: parseSubmanagerEntries(
-            item?.subManagers || item?.subManagerEmails || []
-          )
-        }));
+      const normalizedLocal = normalizeBranchesPayload(parsed);
+      if (normalizedLocal.length) {
+        branchesState = normalizedLocal;
         return;
       }
     } catch (err) {
@@ -327,24 +368,57 @@ function renderBranchesAdmin() {
 
   list.innerHTML = "";
 
-  branchesState.forEach((branch) => {
+  const visibleBranches = branchesState.filter((branch) => {
+    const haystack = [
+      branch.name,
+      branch.managerName,
+      branch.managerEmail,
+      submanagerNamesToDisplay(branch.subManagers || []),
+      submanagerEmailsToDisplay(branch.subManagers || [])
+    ]
+      .join(" ")
+      .toLowerCase();
+    return !branchSearchTerm || haystack.includes(branchSearchTerm);
+  });
+
+  visibleBranches.forEach((branch) => {
     const card = document.createElement("article");
     card.className = "branch-card";
     card.dataset.id = branch.id;
+    const isEditing = editingBranchId === branch.id;
     card.innerHTML = `
       <div class="branch-fields">
-        <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <div class="d-flex gap-1">
-          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="${editingBranchId === branch.id ? "save" : "edit"}">
-            <i class="bi bi-${editingBranchId === branch.id ? "check2" : "pencil"}"></i>
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="delete">
-            <i class="bi bi-trash"></i>
-          </button>
+        <div class="branch-main-row">
+          <div class="branch-field">
+            <label><i class="bi bi-buildings me-1"></i>Sucursal</label>
+            <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-field">
+            <label><i class="bi bi-person-badge me-1"></i>Gerente</label>
+            <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-field">
+            <label><i class="bi bi-envelope me-1"></i>Email gerente</label>
+            <input type="text" class="form-control" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-actions">
+            <button type="button" class="btn btn-sm ${isEditing ? "btn-primary-macos" : "btn-outline-secondary-macos"}" data-action="${isEditing ? "save" : "edit"}">
+              <i class="bi bi-${isEditing ? "check2-circle" : "pencil-square"} me-1"></i>${isEditing ? "Guardar cambios" : "Editar"}
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary-macos branch-delete-btn" data-action="delete">
+              <i class="bi bi-trash me-1"></i>Eliminar
+            </button>
+          </div>
+        </div>
+        <div class="branch-sub-row">
+          <div class="branch-field">
+            <label><i class="bi bi-people me-1"></i>Subgerentes (nombres)</label>
+            <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-field">
+            <label><i class="bi bi-envelope-paper me-1"></i>Subgerentes (emails)</label>
+            <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
+          </div>
         </div>
       </div>
     `;
@@ -368,8 +442,6 @@ function upsertBranch(payload) {
   } else {
     branchesState.push({ id: createBranchId(), name, managerName, managerEmail, subManagers });
   }
-
-  branchesState.sort((a, b) => a.name.localeCompare(b.name, "es"));
   saveBranches();
   renderBranchesInSelects();
   renderBranchesAdmin();
@@ -1566,15 +1638,18 @@ async function showDesktopTopBranchesToast() {
       <i class="bi bi-x-lg"></i>
     </button>
     <div class="desktop-branches-toast-title">
-      <i class="bi bi-exclamation-circle-fill"></i>
-      Top sucursales con más reclamos (últimos 15 días)
+      <div class="desktop-branches-toast-title-main">
+        <i class="bi bi-shield-fill-exclamation"></i>
+        Top sucursales con más reclamos
+      </div>
+      <small>(últimos 15 días)</small>
     </div>
     <ul class="desktop-branches-toast-list">
       ${rows
         .map(
           ([name, count], idx) => `
           <li>
-            <span><i class="bi bi-${idx === 0 ? "trophy-fill" : "building"}"></i> ${escapeHtml(name)}</span>
+            <span><i class="bi bi-trophy-fill rank-trophy rank-${idx + 1}"></i> ${escapeHtml(name)}</span>
             <strong>${count}</strong>
           </li>`
         )
@@ -1603,6 +1678,20 @@ async function showDesktopTopBranchesToast() {
       closeToast();
     }
   }, 1000);
+}
+
+function getDefaultChartRange(days = 90) {
+  const to = new Date();
+  to.setHours(23, 59, 59, 999);
+  const from = new Date(to);
+  from.setDate(from.getDate() - (days - 1));
+  from.setHours(0, 0, 0, 0);
+  return { from, to };
+}
+
+function setChartsRangeInputFromState() {
+  if (!chartsDatePicker || !chartDateRange.from || !chartDateRange.to) return;
+  chartsDatePicker.setDate([chartDateRange.from, chartDateRange.to], true);
 }
 
 function initSplash() {
@@ -1965,14 +2054,29 @@ async function renderChartsView() {
   const skuColors = skuRows.map((_, idx) => colorFromIndex(idx + 9));
   const skuBorderColors = skuRows.map((_, idx) => borderColorFromIndex(idx + 9));
   const totalClaims = filtered.length;
-  const branchWithMostClaims = claimsRows[0] || ["Sin datos", 0];
+  const topBranches = claimsRows.slice(0, 3);
 
   if (chartsSummary) {
     chartsSummary.innerHTML = `
-      <article class="summary-card"><i class="bi bi-megaphone-fill"></i><span>Total reclamos</span><strong>${totalClaims}</strong></article>
-      <article class="summary-card"><i class="bi bi-buildings-fill"></i><span>Sucursales con reclamos</span><strong>${claimsRows.length}</strong></article>
-      <article class="summary-card"><i class="bi bi-box-seam"></i><span>SKU distintos</span><strong>${skuMap.size}</strong></article>
-      <article class="summary-card"><i class="bi bi-trophy-fill"></i><span>Mayor volumen</span><strong>${escapeHtml(branchWithMostClaims[0])} (${branchWithMostClaims[1]})</strong></article>
+      <article class="summary-card summary-card-compact"><i class="bi bi-megaphone-fill"></i><span>Total reclamos</span><strong>${totalClaims}</strong></article>
+      <article class="summary-card summary-card-compact"><i class="bi bi-buildings-fill"></i><span>Sucursales con reclamos</span><strong>${claimsRows.length}</strong></article>
+      <article class="summary-card summary-card-compact"><i class="bi bi-box-seam"></i><span>SKU distintos</span><strong>${skuMap.size}</strong></article>
+      <article class="summary-card summary-card-highlight">
+        <span class="summary-highlight-icon"><i class="bi bi-trophy-fill"></i></span>
+        <span>Top sucursales por volumen</span>
+        <ol class="summary-top3-list">
+          ${topBranches
+            .map(
+              ([name, count], idx) => `
+              <li>
+                <i class="bi bi-trophy-fill rank-trophy rank-${idx + 1}"></i>
+                <span class="summary-highlight-branch" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                <strong>${count}</strong>
+              </li>`
+            )
+            .join("") || '<li><span class="summary-highlight-branch">Sin datos</span></li>'}
+        </ol>
+      </article>
     `;
   }
 
@@ -2339,7 +2443,7 @@ function hidePrintBanner() {
 // =======================
 // DOM + eventos
 // =======================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   initSplash();
   initSkuSection();
   initCityAutocomplete();
@@ -2365,6 +2469,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const refreshHistoryBtn = document.getElementById("refresh-history-btn");
   const branchForm = document.getElementById("branch-form");
   const branchesList = document.getElementById("branches-list");
+  const branchSearchInput = document.getElementById("branch-search-input");
   const chartsApplyBtn = document.getElementById("charts-apply-btn");
   const chartsClearBtn = document.getElementById("charts-clear-btn");
   const chartsDateRangeInput = document.getElementById("charts-date-range");
@@ -2377,7 +2482,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const printTicketBtn = document.getElementById("print-ticket-btn");
 
-  loadBranches();
+  await loadBranches();
   renderBranchesInSelects();
   renderBranchesAdmin();
 
@@ -2410,7 +2515,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (chartsDateRangeInput && window.flatpickr) {
-    flatpickr(chartsDateRangeInput, {
+    chartsDatePicker = flatpickr(chartsDateRangeInput, {
       mode: "range",
       dateFormat: "Y-m-d",
       locale: window.flatpickr?.l10ns?.es || "es",
@@ -2426,6 +2531,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  chartDateRange = getDefaultChartRange(90);
+  setChartsRangeInputFromState();
 
   if (navNew) {
     navNew.addEventListener("click", () => setActiveView("form"));
@@ -2452,8 +2560,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (chartsClearBtn) {
     chartsClearBtn.addEventListener("click", () => {
-      chartDateRange = { from: null, to: null };
-      if (chartsDateRangeInput) chartsDateRangeInput.value = "";
+      chartDateRange = getDefaultChartRange(90);
+      setChartsRangeInputFromState();
       if (chartsBranchOptions) {
         chartsBranchOptions
           .querySelectorAll("input[type='checkbox']")
@@ -2496,6 +2604,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (branchForm) {
     branchForm.addEventListener("submit", (e) => {
       e.preventDefault();
+      const submitBtn = branchForm.querySelector('button[type="submit"]');
       const name = document.getElementById("branch-name-input")?.value || "";
       const managerName = document.getElementById("branch-manager-input")?.value || "";
       const managerEmail = document.getElementById("branch-email-input")?.value || "";
@@ -2509,13 +2618,31 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       try {
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.dataset.original = submitBtn.innerHTML;
+          submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+        }
         upsertBranch({ name, managerName, managerEmail, subManagers });
         branchForm.reset();
         editingBranchId = null;
+        showToast();
         renderChartsView();
       } catch (err) {
         showSwalError("No se pudo guardar", err?.message || "Revisá los datos.");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = submitBtn.dataset.original || submitBtn.innerHTML;
+        }
       }
+    });
+  }
+
+  if (branchSearchInput) {
+    branchSearchInput.addEventListener("input", (e) => {
+      branchSearchTerm = String(e.target.value || "").trim().toLowerCase();
+      renderBranchesAdmin();
     });
   }
 
@@ -2531,6 +2658,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (action === "edit") {
         editingBranchId = branchId;
         renderBranchesAdmin();
+        setTimeout(() => {
+          document
+            .querySelector(`.branch-card[data-id="${branchId}"] [data-field="name"]`)
+            ?.focus();
+        }, 0);
         return;
       }
       if (action === "delete") {
@@ -2540,6 +2672,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       if (action === "save") {
+        actionBtn.disabled = true;
+        const original = actionBtn.innerHTML;
+        actionBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
         const name = card.querySelector('[data-field="name"]')?.value || "";
         const managerName = card.querySelector('[data-field="managerName"]')?.value || "";
         const managerEmail = card.querySelector('[data-field="managerEmail"]')?.value || "";
@@ -2553,9 +2688,13 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           upsertBranch({ id: branchId, name, managerName, managerEmail, subManagers });
           editingBranchId = null;
+          showToast();
           renderChartsView();
         } catch (err) {
           showSwalError("No se pudo actualizar", err?.message || "Revisá los datos.");
+        } finally {
+          actionBtn.disabled = false;
+          actionBtn.innerHTML = original;
         }
       }
     });
