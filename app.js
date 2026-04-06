@@ -335,33 +335,37 @@ function renderBranchesAdmin() {
     const isEditing = editingBranchId === branch.id;
     card.innerHTML = `
       <div class="branch-fields">
-        <div class="branch-field">
-          <label>Sucursal</label>
-          <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${isEditing ? "" : "disabled"} />
+        <div class="branch-main-row">
+          <div class="branch-field">
+            <label>Sucursal</label>
+            <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-field">
+            <label>Gerente</label>
+            <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-field">
+            <label>Email gerente</label>
+            <input type="text" class="form-control" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-actions">
+            <button type="button" class="btn btn-sm ${isEditing ? "btn-primary-macos" : "btn-outline-secondary-macos"}" data-action="${isEditing ? "save" : "edit"}">
+              <i class="bi bi-${isEditing ? "check2-circle" : "pencil-square"} me-1"></i>${isEditing ? "Guardar cambios" : "Editar"}
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary-macos branch-delete-btn" data-action="delete">
+              <i class="bi bi-trash me-1"></i>Eliminar
+            </button>
+          </div>
         </div>
-        <div class="branch-field">
-          <label>Gerente</label>
-          <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${isEditing ? "" : "disabled"} />
-        </div>
-        <div class="branch-field">
-          <label>Email gerente</label>
-          <input type="text" class="form-control" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${isEditing ? "" : "disabled"} />
-        </div>
-        <div class="branch-field">
-          <label>Subgerentes (nombres)</label>
-          <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
-        </div>
-        <div class="branch-field">
-          <label>Subgerentes (emails)</label>
-          <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
-        </div>
-        <div class="branch-actions">
-          <button type="button" class="btn btn-sm ${isEditing ? "btn-primary-macos" : "btn-outline-secondary-macos"}" data-action="${isEditing ? "save" : "edit"}">
-            <i class="bi bi-${isEditing ? "check2-circle" : "pencil-square"} me-1"></i>${isEditing ? "Guardar cambios" : "Editar"}
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary-macos branch-delete-btn" data-action="delete">
-            <i class="bi bi-trash me-1"></i>Eliminar
-          </button>
+        <div class="branch-sub-row">
+          <div class="branch-field">
+            <label>Subgerentes (nombres)</label>
+            <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
+          </div>
+          <div class="branch-field">
+            <label>Subgerentes (emails)</label>
+            <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
+          </div>
         </div>
       </div>
     `;
@@ -2009,7 +2013,7 @@ async function renderChartsView() {
       <article class="summary-card summary-card-highlight">
         <span class="summary-highlight-icon"><i class="bi bi-trophy-fill"></i></span>
         <span>Mayor volumen</span>
-        <strong>${escapeHtml(branchWithMostClaims[0])}</strong>
+        <strong class="summary-highlight-branch" title="${escapeHtml(branchWithMostClaims[0])}">${escapeHtml(branchWithMostClaims[0])}</strong>
         <small>${branchWithMostClaims[1]} reclamo(s)</small>
       </article>
     `;

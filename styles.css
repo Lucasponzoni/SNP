@@ -1505,9 +1505,22 @@ body::before {
 }
 
 .branch-card .branch-fields {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.branch-main-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr auto;
   gap: 10px;
   align-items: end;
+}
+
+.branch-sub-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .branch-field {
@@ -1525,9 +1538,10 @@ body::before {
 
 .branch-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
-  min-width: 148px;
+  min-width: 230px;
+  justify-content: flex-end;
 }
 
 .branch-delete-btn {
@@ -1557,11 +1571,31 @@ body::before {
   background: rgba(255, 255, 255, 0.18);
 }
 
+.summary-card-highlight .summary-highlight-icon i {
+  color: #facc15;
+  text-shadow: 0 0 10px rgba(250, 204, 21, 0.45);
+}
+
+.summary-highlight-branch {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
 .desktop-branches-toast {
+  top: 112px;
+  right: 26px;
   border-radius: 24px;
   border: 1px solid rgba(15, 23, 42, 0.4);
   background: linear-gradient(160deg, rgba(35, 53, 97, 0.96), rgba(27, 85, 145, 0.94) 55%, rgba(30, 64, 175, 0.92));
   padding: 16px 14px 12px;
+  transform: translate(12px, 0);
+}
+
+.desktop-branches-toast.visible {
+  transform: translate(0, 0);
 }
 
 .desktop-branches-toast-title-main {
@@ -1609,11 +1643,17 @@ body::before {
 
 @media (max-width: 768px) {
   .branch-grid,
-  .branch-card .branch-fields {
+  .branch-main-row,
+  .branch-sub-row {
     grid-template-columns: 1fr;
   }
 
   .branch-actions {
     min-width: 0;
+    justify-content: stretch;
+  }
+
+  .branch-actions .btn {
+    width: 100%;
   }
 }
