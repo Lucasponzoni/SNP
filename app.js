@@ -130,6 +130,7 @@ let claimsByBranchChart = null;
 let skuRankingChart = null;
 let claimsTrendChart = null;
 let chartDateRange = { from: null, to: null };
+let chartsDatePicker = null;
 
 function createBranchId() {
   return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -331,19 +332,35 @@ function renderBranchesAdmin() {
     const card = document.createElement("article");
     card.className = "branch-card";
     card.dataset.id = branch.id;
+    const isEditing = editingBranchId === branch.id;
     card.innerHTML = `
       <div class="branch-fields">
-        <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <div class="d-flex gap-1">
-          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="${editingBranchId === branch.id ? "save" : "edit"}">
-            <i class="bi bi-${editingBranchId === branch.id ? "check2" : "pencil"}"></i>
+        <div class="branch-field">
+          <label>Sucursal</label>
+          <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${isEditing ? "" : "disabled"} />
+        </div>
+        <div class="branch-field">
+          <label>Gerente</label>
+          <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${isEditing ? "" : "disabled"} />
+        </div>
+        <div class="branch-field">
+          <label>Email gerente</label>
+          <input type="text" class="form-control" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${isEditing ? "" : "disabled"} />
+        </div>
+        <div class="branch-field">
+          <label>Subgerentes (nombres)</label>
+          <input type="text" class="form-control capitalize-text" title="Nombres de subgerentes" data-field="subManagerNames" value="${escapeHtml(submanagerNamesToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
+        </div>
+        <div class="branch-field">
+          <label>Subgerentes (emails)</label>
+          <input type="text" class="form-control" title="Emails de subgerentes" data-field="subManagerEmails" value="${escapeHtml(submanagerEmailsToDisplay(branch.subManagers || []))}" ${isEditing ? "" : "disabled"} />
+        </div>
+        <div class="branch-actions">
+          <button type="button" class="btn btn-sm ${isEditing ? "btn-primary-macos" : "btn-outline-secondary-macos"}" data-action="${isEditing ? "save" : "edit"}">
+            <i class="bi bi-${isEditing ? "check2-circle" : "pencil-square"} me-1"></i>${isEditing ? "Guardar cambios" : "Editar"}
           </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="delete">
-            <i class="bi bi-trash"></i>
+          <button type="button" class="btn btn-sm btn-outline-secondary-macos branch-delete-btn" data-action="delete">
+            <i class="bi bi-trash me-1"></i>Eliminar
           </button>
         </div>
       </div>
@@ -1566,15 +1583,18 @@ async function showDesktopTopBranchesToast() {
       <i class="bi bi-x-lg"></i>
     </button>
     <div class="desktop-branches-toast-title">
-      <i class="bi bi-exclamation-circle-fill"></i>
-      Top sucursales con más reclamos (últimos 15 días)
+      <div class="desktop-branches-toast-title-main">
+        <i class="bi bi-shield-fill-exclamation"></i>
+        Top sucursales con más reclamos
+      </div>
+      <small>(últimos 15 días)</small>
     </div>
     <ul class="desktop-branches-toast-list">
       ${rows
         .map(
           ([name, count], idx) => `
           <li>
-            <span><i class="bi bi-${idx === 0 ? "trophy-fill" : "building"}"></i> ${escapeHtml(name)}</span>
+            <span><i class="bi bi-trophy-fill rank-trophy rank-${idx + 1}"></i> ${escapeHtml(name)}</span>
             <strong>${count}</strong>
           </li>`
         )
@@ -1603,6 +1623,20 @@ async function showDesktopTopBranchesToast() {
       closeToast();
     }
   }, 1000);
+}
+
+function getDefaultChartRange(days = 90) {
+  const to = new Date();
+  to.setHours(23, 59, 59, 999);
+  const from = new Date(to);
+  from.setDate(from.getDate() - (days - 1));
+  from.setHours(0, 0, 0, 0);
+  return { from, to };
+}
+
+function setChartsRangeInputFromState() {
+  if (!chartsDatePicker || !chartDateRange.from || !chartDateRange.to) return;
+  chartsDatePicker.setDate([chartDateRange.from, chartDateRange.to], true);
 }
 
 function initSplash() {
@@ -1972,7 +2006,12 @@ async function renderChartsView() {
       <article class="summary-card"><i class="bi bi-megaphone-fill"></i><span>Total reclamos</span><strong>${totalClaims}</strong></article>
       <article class="summary-card"><i class="bi bi-buildings-fill"></i><span>Sucursales con reclamos</span><strong>${claimsRows.length}</strong></article>
       <article class="summary-card"><i class="bi bi-box-seam"></i><span>SKU distintos</span><strong>${skuMap.size}</strong></article>
-      <article class="summary-card"><i class="bi bi-trophy-fill"></i><span>Mayor volumen</span><strong>${escapeHtml(branchWithMostClaims[0])} (${branchWithMostClaims[1]})</strong></article>
+      <article class="summary-card summary-card-highlight">
+        <span class="summary-highlight-icon"><i class="bi bi-trophy-fill"></i></span>
+        <span>Mayor volumen</span>
+        <strong>${escapeHtml(branchWithMostClaims[0])}</strong>
+        <small>${branchWithMostClaims[1]} reclamo(s)</small>
+      </article>
     `;
   }
 
@@ -2410,7 +2449,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (chartsDateRangeInput && window.flatpickr) {
-    flatpickr(chartsDateRangeInput, {
+    chartsDatePicker = flatpickr(chartsDateRangeInput, {
       mode: "range",
       dateFormat: "Y-m-d",
       locale: window.flatpickr?.l10ns?.es || "es",
@@ -2426,6 +2465,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  chartDateRange = getDefaultChartRange(90);
+  setChartsRangeInputFromState();
 
   if (navNew) {
     navNew.addEventListener("click", () => setActiveView("form"));
@@ -2452,8 +2494,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (chartsClearBtn) {
     chartsClearBtn.addEventListener("click", () => {
-      chartDateRange = { from: null, to: null };
-      if (chartsDateRangeInput) chartsDateRangeInput.value = "";
+      chartDateRange = getDefaultChartRange(90);
+      setChartsRangeInputFromState();
       if (chartsBranchOptions) {
         chartsBranchOptions
           .querySelectorAll("input[type='checkbox']")
@@ -2512,6 +2554,7 @@ document.addEventListener("DOMContentLoaded", () => {
         upsertBranch({ name, managerName, managerEmail, subManagers });
         branchForm.reset();
         editingBranchId = null;
+        showToast();
         renderChartsView();
       } catch (err) {
         showSwalError("No se pudo guardar", err?.message || "Revisá los datos.");
@@ -2553,6 +2596,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           upsertBranch({ id: branchId, name, managerName, managerEmail, subManagers });
           editingBranchId = null;
+          showToast();
           renderChartsView();
         } catch (err) {
           showSwalError("No se pudo actualizar", err?.message || "Revisá los datos.");
