@@ -103,6 +103,227 @@ function showSwalError(title, text) {
   }
 }
 
+function toCapitalizedText(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("es-AR")
+    .replace(/\b(\p{L})/gu, (m) => m.toLocaleUpperCase("es-AR"));
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const BRANCHES_STORAGE_KEY = "snp_custom_branches_v1";
+let branchesState = [];
+let editingBranchId = null;
+let claimsByBranchChart = null;
+let skuRankingChart = null;
+let chartDateRange = { from: null, to: null };
+
+function createBranchId() {
+  return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function parseSubmanagerEmails(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean);
+  }
+  return String(raw || "")
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getInitialBranchesFromSelect() {
+  const select = document.getElementById("sucursal");
+  if (!select) return [];
+
+  return Array.from(select.options)
+    .filter((opt) => opt.value)
+    .map((opt) => ({
+      id: createBranchId(),
+      name: String(opt.value || "").trim(),
+      managerName: String(opt.getAttribute("data-gerente-nombre") || "").trim(),
+      managerEmail: String(opt.getAttribute("data-gerente-email") || "").trim(),
+      subManagerEmails: []
+    }));
+}
+
+function saveBranches() {
+  localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branchesState));
+}
+
+function loadBranches() {
+  const raw = localStorage.getItem(BRANCHES_STORAGE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        branchesState = parsed;
+        return;
+      }
+    } catch (err) {
+      console.warn("No se pudo parsear sucursales guardadas:", err);
+    }
+  }
+
+  branchesState = getInitialBranchesFromSelect();
+  saveBranches();
+}
+
+function renderBranchesInSelects() {
+  const sucursalSelect = document.getElementById("sucursal");
+  const chartsFilter = document.getElementById("charts-branch-options");
+  const chartsToggleText = document.getElementById("charts-branch-toggle-text");
+  const chartsSelectedChips = document.getElementById("charts-selected-chips");
+
+  if (sucursalSelect) {
+    const current = sucursalSelect.value;
+    sucursalSelect.innerHTML = '<option value="">Seleccioná una sucursal…</option>';
+
+    branchesState.forEach((branch) => {
+      const option = document.createElement("option");
+      option.value = branch.name;
+      option.textContent = toCapitalizedText(branch.name);
+      option.setAttribute("data-gerente-nombre", toCapitalizedText(branch.managerName));
+      option.setAttribute("data-gerente-email", String(branch.managerEmail || "").trim().toLowerCase());
+      option.setAttribute("data-subgerentes", parseSubmanagerEmails(branch.subManagerEmails).join(","));
+      sucursalSelect.appendChild(option);
+    });
+
+    if (current && Array.from(sucursalSelect.options).some((o) => o.value === current)) {
+      sucursalSelect.value = current;
+    }
+  }
+
+  if (chartsFilter) {
+    const previouslySelected = new Set(
+      Array.from(chartsFilter.querySelectorAll("input[type='checkbox']:checked")).map((i) => i.value)
+    );
+    chartsFilter.innerHTML = "";
+    branchesState.forEach((branch) => {
+      const option = document.createElement("label");
+      option.className = "branch-picker-option";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = branch.name;
+      checkbox.checked = previouslySelected.has(branch.name);
+      const caption = document.createElement("span");
+      caption.textContent = toCapitalizedText(branch.name);
+      option.appendChild(checkbox);
+      option.appendChild(caption);
+      chartsFilter.appendChild(option);
+    });
+
+    const selectedNow = Array.from(
+      chartsFilter.querySelectorAll("input[type='checkbox']:checked")
+    ).map((i) => i.value);
+    if (chartsToggleText) {
+      chartsToggleText.textContent = selectedNow.length
+        ? `${selectedNow.length} sucursal(es) seleccionadas`
+        : "Todas las sucursales";
+    }
+    if (chartsSelectedChips) {
+      chartsSelectedChips.innerHTML = selectedNow.length
+        ? selectedNow
+            .map((name) => `<span class="selected-chip">${escapeHtml(toCapitalizedText(name))}</span>`)
+            .join("")
+        : '<span class="selected-chip muted">Sin filtro por sucursal</span>';
+    }
+  }
+}
+
+function renderBranchesAdmin() {
+  const list = document.getElementById("branches-list");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  branchesState.forEach((branch) => {
+    const card = document.createElement("article");
+    card.className = "branch-card";
+    card.dataset.id = branch.id;
+    card.innerHTML = `
+      <div class="branch-fields">
+        <input type="text" class="form-control capitalize-text" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="subManagerEmails" value="${escapeHtml(parseSubmanagerEmails(branch.subManagerEmails).join(", "))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <div class="d-flex gap-1">
+          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="${editingBranchId === branch.id ? "save" : "edit"}">
+            <i class="bi bi-${editingBranchId === branch.id ? "check2" : "pencil"}"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="delete">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function upsertBranch(payload) {
+  const name = toCapitalizedText(payload.name);
+  const managerName = toCapitalizedText(payload.managerName);
+  const managerEmail = String(payload.managerEmail || "").trim().toLowerCase();
+  const subManagerEmails = parseSubmanagerEmails(payload.subManagerEmails);
+  if (!name || !managerName || !managerEmail) {
+    throw new Error("Completá nombre de sucursal, gerente y email.");
+  }
+
+  if (payload.id) {
+    branchesState = branchesState.map((b) =>
+      b.id === payload.id ? { ...b, name, managerName, managerEmail, subManagerEmails } : b
+    );
+  } else {
+    branchesState.push({ id: createBranchId(), name, managerName, managerEmail, subManagerEmails });
+  }
+
+  branchesState.sort((a, b) => a.name.localeCompare(b.name, "es"));
+  saveBranches();
+  renderBranchesInSelects();
+  renderBranchesAdmin();
+}
+
+async function deleteBranch(branchId) {
+  if (!window.Swal) {
+    const confirmed = window.confirm("¿Eliminar sucursal?");
+    if (!confirmed) return false;
+    branchesState = branchesState.filter((b) => b.id !== branchId);
+    saveBranches();
+    renderBranchesInSelects();
+    renderBranchesAdmin();
+    return true;
+  }
+
+  const result = await Swal.fire({
+    title: "¿Eliminar sucursal?",
+    text: "Se quitará de todos los selectores y filtros.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sí, eliminar",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: "#ff3b30",
+    cancelButtonColor: "#8e8e93",
+    background: "#f7f7fc",
+    borderRadius: "18px"
+  });
+  if (!result.isConfirmed) return false;
+
+  branchesState = branchesState.filter((b) => b.id !== branchId);
+  saveBranches();
+  renderBranchesInSelects();
+  renderBranchesAdmin();
+  return true;
+}
+
 // =======================
 // Productos (autocomplete)
 // =======================
@@ -1484,6 +1705,122 @@ function renderHistoryPage() {
   if (nextBtn) nextBtn.disabled = currentHistoryPage >= totalPages;
 }
 
+function parseDateFromTicket(ticket) {
+  if (ticket?.createdAtIso) {
+    const parsed = new Date(ticket.createdAtIso);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function ticketMatchesChartFilters(ticket, selectedBranches) {
+  if (selectedBranches.length && !selectedBranches.includes(ticket.sucursal)) {
+    return false;
+  }
+
+  if (chartDateRange.from || chartDateRange.to) {
+    const ticketDate = parseDateFromTicket(ticket);
+    if (!ticketDate) return false;
+    if (chartDateRange.from && ticketDate < chartDateRange.from) return false;
+    if (chartDateRange.to && ticketDate > chartDateRange.to) return false;
+  }
+
+  return true;
+}
+
+function destroyChartsIfNeeded() {
+  if (claimsByBranchChart) {
+    claimsByBranchChart.destroy();
+    claimsByBranchChart = null;
+  }
+  if (skuRankingChart) {
+    skuRankingChart.destroy();
+    skuRankingChart = null;
+  }
+}
+
+function getSelectedBranchesFromPicker() {
+  const container = document.getElementById("charts-branch-options");
+  if (!container) return [];
+  return Array.from(container.querySelectorAll("input[type='checkbox']:checked")).map(
+    (i) => i.value
+  );
+}
+
+async function renderChartsView() {
+  const claimsCanvas = document.getElementById("claims-by-branch-chart");
+  const skuCanvas = document.getElementById("sku-ranking-chart");
+  const claimsTypeSelect = document.getElementById("claims-chart-type");
+  const skuTypeSelect = document.getElementById("sku-chart-type");
+  if (!claimsCanvas || !skuCanvas || !window.Chart) return;
+
+  const selectedBranches = getSelectedBranchesFromPicker();
+  const tickets = await fetchAllTickets();
+  const filtered = tickets.filter((t) => ticketMatchesChartFilters(t, selectedBranches));
+
+  const claimsMap = new Map();
+  const skuMap = new Map();
+
+  filtered.forEach((t) => {
+    const branchKey = t.sucursal || "Sin sucursal";
+    claimsMap.set(branchKey, (claimsMap.get(branchKey) || 0) + 1);
+
+    const skus = String(t.producto || "")
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+    skus.forEach((sku) => skuMap.set(sku, (skuMap.get(sku) || 0) + 1));
+  });
+
+  const claimsRows = Array.from(claimsMap.entries()).sort((a, b) => b[1] - a[1]);
+  const skuRows = Array.from(skuMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  destroyChartsIfNeeded();
+
+  const claimsType = claimsTypeSelect?.value || "bar";
+  const skuType = skuTypeSelect?.value || "bar";
+
+  claimsByBranchChart = new Chart(claimsCanvas, {
+    type: claimsType,
+    data: {
+      labels: claimsRows.map(([name]) => toCapitalizedText(name)),
+      datasets: [
+        {
+          label: "Reclamos",
+          data: claimsRows.map(([, count]) => count),
+          backgroundColor: "rgba(59, 130, 246, 0.55)",
+          borderColor: "rgba(37, 99, 235, 1)",
+          borderWidth: 1
+        }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  skuRankingChart = new Chart(skuCanvas, {
+    type: skuType,
+    data: {
+      labels: skuRows.map(([sku]) => sku),
+      datasets: [
+        {
+          label: "Cantidad",
+          data: skuRows.map(([, count]) => count),
+          backgroundColor: "rgba(16, 185, 129, 0.55)",
+          borderColor: "rgba(5, 150, 105, 1)",
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      indexAxis: skuType === "bar" ? "y" : "x",
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+}
+
 async function handleReprintTicket(firebaseKey) {
   try {
     const tickets = await fetchAllTickets();
@@ -1788,34 +2125,78 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const navNew = document.getElementById("nav-new-ticket");
   const navHistory = document.getElementById("nav-history");
+  const navBranches = document.getElementById("nav-branches");
+  const navCharts = document.getElementById("nav-charts");
   const viewForm = document.getElementById("view-form");
   const viewHistory = document.getElementById("view-history");
+  const viewBranches = document.getElementById("view-branches");
+  const viewCharts = document.getElementById("view-charts");
 
   const searchHistoryInput = document.getElementById("history-search-input");
   const historyPrevBtn = document.getElementById("history-prev-btn");
   const historyNextBtn = document.getElementById("history-next-btn");
   const historyListEl = document.getElementById("history-list");
   const refreshHistoryBtn = document.getElementById("refresh-history-btn");
+  const branchForm = document.getElementById("branch-form");
+  const branchesList = document.getElementById("branches-list");
+  const chartsApplyBtn = document.getElementById("charts-apply-btn");
+  const chartsDateRangeInput = document.getElementById("charts-date-range");
+  const chartsBranchOptions = document.getElementById("charts-branch-options");
+  const chartsBranchToggle = document.getElementById("charts-branch-toggle");
+  const chartsBranchPanel = document.getElementById("charts-branch-panel");
+  const claimsChartType = document.getElementById("claims-chart-type");
+  const skuChartType = document.getElementById("sku-chart-type");
 
   const printTicketBtn = document.getElementById("print-ticket-btn");
 
+  loadBranches();
+  renderBranchesInSelects();
+  renderBranchesAdmin();
+
   function setActiveView(view) {
-    if (!viewForm || !viewHistory) return;
+    [viewForm, viewHistory, viewBranches, viewCharts].forEach((v) => v?.classList.remove("active"));
+    [navNew, navHistory, navBranches, navCharts].forEach((n) => n?.classList.remove("active"));
 
     if (view === "form") {
-      viewForm.classList.add("active");
-      viewHistory.classList.remove("active");
+      viewForm?.classList.add("active");
       navNew?.classList.add("active");
-      navHistory?.classList.remove("active");
-    } else {
-      viewHistory.classList.add("active");
-      viewForm.classList.remove("active");
-      navHistory?.classList.add("active");
-      navNew?.classList.remove("active");
-
-      // Cargamos historial al entrar
-      loadAndRenderTickets();
+      return;
     }
+    if (view === "history") {
+      viewHistory?.classList.add("active");
+      navHistory?.classList.add("active");
+      loadAndRenderTickets();
+      return;
+    }
+    if (view === "branches") {
+      viewBranches?.classList.add("active");
+      navBranches?.classList.add("active");
+      renderBranchesAdmin();
+      return;
+    }
+    if (view === "charts") {
+      viewCharts?.classList.add("active");
+      navCharts?.classList.add("active");
+      renderChartsView();
+    }
+  }
+
+  if (chartsDateRangeInput && window.flatpickr) {
+    flatpickr(chartsDateRangeInput, {
+      mode: "range",
+      dateFormat: "Y-m-d",
+      locale: window.flatpickr?.l10ns?.es || "es",
+      onClose: (selectedDates) => {
+        const from = selectedDates[0] || null;
+        const toBase = selectedDates[1] || selectedDates[0] || null;
+        const to = toBase ? new Date(toBase) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+        chartDateRange = {
+          from,
+          to
+        };
+      }
+    });
   }
 
   if (navNew) {
@@ -1825,11 +2206,102 @@ document.addEventListener("DOMContentLoaded", () => {
   if (navHistory) {
     navHistory.addEventListener("click", () => setActiveView("history"));
   }
+  if (navBranches) {
+    navBranches.addEventListener("click", () => setActiveView("branches"));
+  }
+  if (navCharts) {
+    navCharts.addEventListener("click", () => setActiveView("charts"));
+  }
 
   if (refreshHistoryBtn) {
     refreshHistoryBtn.addEventListener("click", () =>
       loadAndRenderTickets({ forceReload: true })
     );
+  }
+
+  if (chartsApplyBtn) {
+    chartsApplyBtn.addEventListener("click", () => renderChartsView());
+  }
+  if (chartsBranchOptions) {
+    chartsBranchOptions.addEventListener("change", () => {
+      renderBranchesInSelects();
+      renderChartsView();
+    });
+  }
+  if (chartsBranchToggle && chartsBranchPanel) {
+    chartsBranchToggle.addEventListener("click", () => {
+      chartsBranchPanel.classList.toggle("d-none");
+    });
+    document.addEventListener("click", (e) => {
+      if (
+        !chartsBranchPanel.classList.contains("d-none") &&
+        !chartsBranchPanel.contains(e.target) &&
+        !chartsBranchToggle.contains(e.target)
+      ) {
+        chartsBranchPanel.classList.add("d-none");
+      }
+    });
+  }
+  if (claimsChartType) {
+    claimsChartType.addEventListener("change", () => renderChartsView());
+  }
+  if (skuChartType) {
+    skuChartType.addEventListener("change", () => renderChartsView());
+  }
+
+  if (branchForm) {
+    branchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = document.getElementById("branch-name-input")?.value || "";
+      const managerName = document.getElementById("branch-manager-input")?.value || "";
+      const managerEmail = document.getElementById("branch-email-input")?.value || "";
+      const subManagerEmails = document.getElementById("branch-submanagers-input")?.value || "";
+
+      try {
+        upsertBranch({ name, managerName, managerEmail, subManagerEmails });
+        branchForm.reset();
+        editingBranchId = null;
+        renderChartsView();
+      } catch (err) {
+        showSwalError("No se pudo guardar", err?.message || "Revisá los datos.");
+      }
+    });
+  }
+
+  if (branchesList) {
+    branchesList.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest("[data-action]");
+      if (!actionBtn) return;
+      const card = e.target.closest(".branch-card");
+      const branchId = card?.dataset?.id;
+      if (!branchId) return;
+
+      const action = actionBtn.dataset.action;
+      if (action === "edit") {
+        editingBranchId = branchId;
+        renderBranchesAdmin();
+        return;
+      }
+      if (action === "delete") {
+        deleteBranch(branchId).then((deleted) => {
+          if (deleted) renderChartsView();
+        });
+        return;
+      }
+      if (action === "save") {
+        const name = card.querySelector('[data-field="name"]')?.value || "";
+        const managerName = card.querySelector('[data-field="managerName"]')?.value || "";
+        const managerEmail = card.querySelector('[data-field="managerEmail"]')?.value || "";
+        const subManagerEmails = card.querySelector('[data-field="subManagerEmails"]')?.value || "";
+        try {
+          upsertBranch({ id: branchId, name, managerName, managerEmail, subManagerEmails });
+          editingBranchId = null;
+          renderChartsView();
+        } catch (err) {
+          showSwalError("No se pudo actualizar", err?.message || "Revisá los datos.");
+        }
+      }
+    });
   }
 
   if (searchHistoryInput) {
@@ -1940,6 +2412,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sucursal = opt.value;
         const sucursalGerenteEmail = (opt.getAttribute("data-gerente-email") || "").trim();
         const sucursalGerenteNombre = opt.getAttribute("data-gerente-nombre") || "";
+        const subManagerEmails = parseSubmanagerEmails(opt.getAttribute("data-subgerentes") || "");
 
         const { firebaseKey, display, iso } = getArgentinaDateInfo();
 
@@ -1949,6 +2422,7 @@ document.addEventListener("DOMContentLoaded", () => {
           sucursal,
           sucursalGerenteNombre,
           sucursalGerenteEmail,
+          subManagerEmails,
           cliente: clienteInput.value.trim().toUpperCase(),
           nroCliente: nroClienteInput.value.trim().toUpperCase(),
           direccion: direccionInput.value.trim().toUpperCase(),
@@ -2020,6 +2494,26 @@ document.addEventListener("DOMContentLoaded", () => {
             addOverlayStep("✔ Copia enviada al gerente.", "ok");
           } else {
             addOverlayStep("No se pudo enviar la copia al gerente.", "error");
+          }
+        }
+
+        if (Array.isArray(ticketData.subManagerEmails) && ticketData.subManagerEmails.length) {
+          const htmlSubgerente = buildTicketEmailHtml(commonEmailData, "gerente");
+          for (let i = 0; i < ticketData.subManagerEmails.length; i++) {
+            const subEmail = ticketData.subManagerEmails[i];
+            addOverlayStep(`Enviando copia al subgerente (${subEmail})…`);
+            const subResp = await sendEmailSnp({
+              toName: "Subgerente de sucursal",
+              toEmail: subEmail,
+              subject: subjectGerente,
+              htmlBody: htmlSubgerente
+            });
+            addOverlayStep(
+              subResp.ok
+                ? `✔ Copia enviada a subgerente (${subEmail}).`
+                : `No se pudo enviar copia a subgerente (${subEmail}).`,
+              subResp.ok ? "ok" : "error"
+            );
           }
         }
 
