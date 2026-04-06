@@ -1755,10 +1755,10 @@ body::before {
 }
 
 .summary-top3-list .summary-highlight-branch {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .desktop-branches-toast {
@@ -1772,6 +1772,16 @@ body::before {
 
 .desktop-branches-toast.visible {
   transform: translate(0, 0) !important;
+}
+
+@media (min-width: 992px) {
+  .charts-summary {
+    grid-template-columns: 0.9fr 0.9fr 0.9fr 1.45fr !important;
+  }
+
+  .summary-card-highlight {
+    min-height: 320px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1791,6 +1801,13 @@ body::before {
   .summary-card-highlight {
     grid-column: 1 / -1;
     min-height: 170px;
+  }
+
+  .summary-top3-list .summary-highlight-branch {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .summary-top3-list li strong {

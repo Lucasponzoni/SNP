@@ -2686,8 +2686,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           subManagerEmails
         );
         try {
-          upsertBranch({ id: branchId, name, managerName, managerEmail, subManagers });
           editingBranchId = null;
+          upsertBranch({ id: branchId, name, managerName, managerEmail, subManagers });
           showToast();
           renderChartsView();
         } catch (err) {
