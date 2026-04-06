@@ -27,7 +27,7 @@ html {
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text",
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text",
     "Helvetica Neue", sans-serif;
   min-height: 100vh;   
   display: flex;
@@ -1265,8 +1265,11 @@ body::after {
 }
 
 .summary-card strong {
-  font-size: 13px;
+  font-size: 31px;
+  font-weight: 800;
+  line-height: 1.05;
   color: #1f2a62;
+  letter-spacing: -0.02em;
 }
 
 .desktop-branches-toast {
@@ -1577,6 +1580,10 @@ body::before {
 }
 
 .summary-highlight-branch {
+  margin-top: 6px;
+  font-size: 14px !important;
+  font-weight: 700;
+  line-height: 1.2;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1584,14 +1591,22 @@ body::before {
   word-break: break-word;
 }
 
+.summary-card-highlight small {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
 .desktop-branches-toast {
-  top: 112px;
-  right: 26px;
+  top: auto;
+  right: 22px;
+  bottom: 20px;
   border-radius: 24px;
   border: 1px solid rgba(15, 23, 42, 0.4);
   background: linear-gradient(160deg, rgba(35, 53, 97, 0.96), rgba(27, 85, 145, 0.94) 55%, rgba(30, 64, 175, 0.92));
   padding: 16px 14px 12px;
-  transform: translate(12px, 0);
+  transform: translate(12px, 12px);
 }
 
 .desktop-branches-toast.visible {
