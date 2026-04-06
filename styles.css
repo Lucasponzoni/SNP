@@ -829,6 +829,73 @@ body::after {
   font-size: 11px;
 }
 
+.branch-form {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.branch-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  gap: 8px;
+}
+
+.branches-list {
+  display: grid;
+  gap: 10px;
+}
+
+.branch-card {
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.65);
+  padding: 10px;
+}
+
+.branch-card .branch-fields {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr auto;
+  gap: 8px;
+}
+
+.capitalize-text {
+  text-transform: capitalize;
+}
+
+.charts-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.charts-filter-item {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.chart-card {
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.65);
+  padding: 10px;
+  min-height: 320px;
+}
+
+.chart-card h3 {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
 /* Animations */
 
 @keyframes spin {
@@ -881,6 +948,13 @@ body::after {
   }
 
   .history-list {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-grid,
+  .branch-card .branch-fields,
+  .charts-filters,
+  .charts-grid {
     grid-template-columns: 1fr;
   }
 }
