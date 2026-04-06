@@ -199,7 +199,7 @@ body::after {
   border-radius: var(--radius-xl);
   border: 1px solid var(--window-border);
   background: var(--window-bg);
-  box-shadow: var(--window-shadow);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.12);
   overflow: hidden;
   backdrop-filter: blur(12px);
 }
@@ -299,7 +299,7 @@ body::after {
   background: #111b3a;
   color: #ffffff;
   border-color: transparent;
-  box-shadow: 0 10px 24px rgba(17, 27, 58, 0.3);
+  box-shadow: 0 8px 18px rgba(17, 27, 58, 0.18);
 }
 
 /* Body + vistas */
@@ -836,8 +836,20 @@ body::after {
 .branch-form {
   border: 1px solid rgba(148, 163, 184, 0.5);
   border-radius: 14px;
-  padding: 10px;
+  padding: 12px;
   background: rgba(248, 250, 252, 0.8);
+}
+
+.branches-list-head {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr 1.2fr auto;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #5b6f8f;
+  margin-bottom: 8px;
+  padding-inline: 6px;
 }
 
 .branch-grid {
@@ -853,9 +865,10 @@ body::after {
 
 .branch-card {
   border-radius: 14px;
-  background: rgba(248, 250, 252, 0.96);
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(148, 163, 184, 0.65);
   padding: 10px;
+  box-shadow: none;
 }
 
 .branch-card .branch-fields {
@@ -958,7 +971,7 @@ body::after {
 
 .charts-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -966,8 +979,9 @@ body::after {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(148, 163, 184, 0.65);
-  padding: 10px;
+  padding: 12px;
   min-height: 360px;
+  width: 100%;
 }
 
 .chart-card h3 {
@@ -1047,6 +1061,7 @@ body::after {
   }
 
   .branch-grid,
+  .branches-list-head,
   .branch-card .branch-fields,
   .charts-filters,
   .charts-grid,

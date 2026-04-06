@@ -130,14 +130,56 @@ function createBranchId() {
   return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function parseSubmanagerEmails(raw) {
-  if (Array.isArray(raw)) {
-    return raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean);
-  }
-  return String(raw || "")
+function parseSubmanagerEntries(raw) {
+  const fromString = String(raw || "")
     .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const angle = chunk.match(/^(.*?)<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>$/);
+      if (angle) {
+        return {
+          name: toCapitalizedText(angle[1].trim()),
+          email: angle[2].trim().toLowerCase()
+        };
+      }
+
+      const colon = chunk.split(":");
+      if (colon.length >= 2) {
+        const email = colon[colon.length - 1].trim().toLowerCase();
+        const name = toCapitalizedText(colon.slice(0, -1).join(":").trim());
+        return { name, email };
+      }
+
+      return { name: "", email: chunk.toLowerCase() };
+    })
+    .filter((entry) => entry.email);
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map((entry) => {
+        if (typeof entry === "string") {
+          return { name: "", email: entry.trim().toLowerCase() };
+        }
+        return {
+          name: toCapitalizedText(entry?.name || ""),
+          email: String(entry?.email || "").trim().toLowerCase()
+        };
+      })
+      .filter((entry) => entry.email);
+  }
+
+  return fromString;
+}
+
+function submanagerEntriesToDisplay(entries) {
+  return parseSubmanagerEntries(entries)
+    .map((entry) => (entry.name ? `${entry.name} <${entry.email}>` : entry.email))
+    .join(", ");
+}
+
+function getSubmanagerEmails(entries) {
+  return parseSubmanagerEntries(entries).map((entry) => entry.email);
 }
 
 function getInitialBranchesFromSelect() {
@@ -151,7 +193,7 @@ function getInitialBranchesFromSelect() {
       name: String(opt.value || "").trim(),
       managerName: String(opt.getAttribute("data-gerente-nombre") || "").trim(),
       managerEmail: String(opt.getAttribute("data-gerente-email") || "").trim(),
-      subManagerEmails: []
+      subManagers: []
     }));
 }
 
@@ -165,7 +207,12 @@ function loadBranches() {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length) {
-        branchesState = parsed;
+        branchesState = parsed.map((item) => ({
+          ...item,
+          subManagers: parseSubmanagerEntries(
+            item?.subManagers || item?.subManagerEmails || []
+          )
+        }));
         return;
       }
     } catch (err) {
@@ -193,7 +240,7 @@ function renderBranchesInSelects() {
       option.textContent = toCapitalizedText(branch.name);
       option.setAttribute("data-gerente-nombre", toCapitalizedText(branch.managerName));
       option.setAttribute("data-gerente-email", String(branch.managerEmail || "").trim().toLowerCase());
-      option.setAttribute("data-subgerentes", parseSubmanagerEmails(branch.subManagerEmails).join(","));
+      option.setAttribute("data-subgerentes", JSON.stringify(parseSubmanagerEntries(branch.subManagers || [])));
       sucursalSelect.appendChild(option);
     });
 
@@ -251,10 +298,10 @@ function renderBranchesAdmin() {
     card.dataset.id = branch.id;
     card.innerHTML = `
       <div class="branch-fields">
-        <input type="text" class="form-control capitalize-text" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" data-field="subManagerEmails" value="${escapeHtml(parseSubmanagerEmails(branch.subManagerEmails).join(", "))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" title="Sucursal" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" title="Nombre de gerente" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" title="Email de gerente" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control" title="Subgerentes (Nombre <email>)" data-field="subManagers" value="${escapeHtml(submanagerEntriesToDisplay(branch.subManagers || []))}" ${editingBranchId === branch.id ? "" : "disabled"} />
         <div class="d-flex gap-1">
           <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="${editingBranchId === branch.id ? "save" : "edit"}">
             <i class="bi bi-${editingBranchId === branch.id ? "check2" : "pencil"}"></i>
@@ -273,17 +320,17 @@ function upsertBranch(payload) {
   const name = toCapitalizedText(payload.name);
   const managerName = toCapitalizedText(payload.managerName);
   const managerEmail = String(payload.managerEmail || "").trim().toLowerCase();
-  const subManagerEmails = parseSubmanagerEmails(payload.subManagerEmails);
+  const subManagers = parseSubmanagerEntries(payload.subManagers);
   if (!name || !managerName || !managerEmail) {
     throw new Error("Completá nombre de sucursal, gerente y email.");
   }
 
   if (payload.id) {
     branchesState = branchesState.map((b) =>
-      b.id === payload.id ? { ...b, name, managerName, managerEmail, subManagerEmails } : b
+      b.id === payload.id ? { ...b, name, managerName, managerEmail, subManagers } : b
     );
   } else {
-    branchesState.push({ id: createBranchId(), name, managerName, managerEmail, subManagerEmails });
+    branchesState.push({ id: createBranchId(), name, managerName, managerEmail, subManagers });
   }
 
   branchesState.sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -1747,6 +1794,16 @@ function getSelectedBranchesFromPicker() {
   );
 }
 
+function colorFromIndex(index, alpha = 0.68) {
+  const hue = (index * 47) % 360;
+  return `hsla(${hue}, 78%, 56%, ${alpha})`;
+}
+
+function borderColorFromIndex(index) {
+  const hue = (index * 47) % 360;
+  return `hsl(${hue}, 78%, 42%)`;
+}
+
 async function renderChartsView() {
   const claimsCanvas = document.getElementById("claims-by-branch-chart");
   const skuCanvas = document.getElementById("sku-ranking-chart");
@@ -1781,6 +1838,10 @@ async function renderChartsView() {
 
   const claimsType = claimsTypeSelect?.value || "bar";
   const skuType = skuTypeSelect?.value || "bar";
+  const claimsColors = claimsRows.map((_, idx) => colorFromIndex(idx));
+  const claimsBorderColors = claimsRows.map((_, idx) => borderColorFromIndex(idx));
+  const skuColors = skuRows.map((_, idx) => colorFromIndex(idx + 9));
+  const skuBorderColors = skuRows.map((_, idx) => borderColorFromIndex(idx + 9));
 
   claimsByBranchChart = new Chart(claimsCanvas, {
     type: claimsType,
@@ -1790,8 +1851,8 @@ async function renderChartsView() {
         {
           label: "Reclamos",
           data: claimsRows.map(([, count]) => count),
-          backgroundColor: "rgba(59, 130, 246, 0.55)",
-          borderColor: "rgba(37, 99, 235, 1)",
+          backgroundColor: claimsColors,
+          borderColor: claimsBorderColors,
           borderWidth: 1
         }
       ]
@@ -1807,8 +1868,8 @@ async function renderChartsView() {
         {
           label: "Cantidad",
           data: skuRows.map(([, count]) => count),
-          backgroundColor: "rgba(16, 185, 129, 0.55)",
-          borderColor: "rgba(5, 150, 105, 1)",
+          backgroundColor: skuColors,
+          borderColor: skuBorderColors,
           borderWidth: 1
         }
       ]
@@ -2140,6 +2201,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const branchForm = document.getElementById("branch-form");
   const branchesList = document.getElementById("branches-list");
   const chartsApplyBtn = document.getElementById("charts-apply-btn");
+  const chartsClearBtn = document.getElementById("charts-clear-btn");
   const chartsDateRangeInput = document.getElementById("charts-date-range");
   const chartsBranchOptions = document.getElementById("charts-branch-options");
   const chartsBranchToggle = document.getElementById("charts-branch-toggle");
@@ -2199,24 +2261,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (chartsDateRangeInput && window.flatpickr) {
-    flatpickr(chartsDateRangeInput, {
-      mode: "range",
-      dateFormat: "Y-m-d",
-      locale: window.flatpickr?.l10ns?.es || "es",
-      onClose: (selectedDates) => {
-        const from = selectedDates[0] || null;
-        const toBase = selectedDates[1] || selectedDates[0] || null;
-        const to = toBase ? new Date(toBase) : null;
-        if (to) to.setHours(23, 59, 59, 999);
-        chartDateRange = {
-          from,
-          to
-        };
-      }
-    });
-  }
-
   if (navNew) {
     navNew.addEventListener("click", () => setActiveView("form"));
   }
@@ -2239,6 +2283,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (chartsApplyBtn) {
     chartsApplyBtn.addEventListener("click", () => renderChartsView());
+  }
+  if (chartsClearBtn) {
+    chartsClearBtn.addEventListener("click", () => {
+      chartDateRange = { from: null, to: null };
+      if (chartsDateRangeInput) chartsDateRangeInput.value = "";
+      if (chartsBranchOptions) {
+        chartsBranchOptions
+          .querySelectorAll("input[type='checkbox']")
+          .forEach((i) => (i.checked = false));
+      }
+      renderBranchesInSelects();
+      renderChartsView();
+    });
   }
   if (chartsBranchOptions) {
     chartsBranchOptions.addEventListener("change", () => {
@@ -2273,10 +2330,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const name = document.getElementById("branch-name-input")?.value || "";
       const managerName = document.getElementById("branch-manager-input")?.value || "";
       const managerEmail = document.getElementById("branch-email-input")?.value || "";
-      const subManagerEmails = document.getElementById("branch-submanagers-input")?.value || "";
+      const subManagers = document.getElementById("branch-submanagers-input")?.value || "";
 
       try {
-        upsertBranch({ name, managerName, managerEmail, subManagerEmails });
+        upsertBranch({ name, managerName, managerEmail, subManagers });
         branchForm.reset();
         editingBranchId = null;
         renderChartsView();
@@ -2310,9 +2367,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const name = card.querySelector('[data-field="name"]')?.value || "";
         const managerName = card.querySelector('[data-field="managerName"]')?.value || "";
         const managerEmail = card.querySelector('[data-field="managerEmail"]')?.value || "";
-        const subManagerEmails = card.querySelector('[data-field="subManagerEmails"]')?.value || "";
+        const subManagers = card.querySelector('[data-field="subManagers"]')?.value || "";
         try {
-          upsertBranch({ id: branchId, name, managerName, managerEmail, subManagerEmails });
+          upsertBranch({ id: branchId, name, managerName, managerEmail, subManagers });
           editingBranchId = null;
           renderChartsView();
         } catch (err) {
@@ -2430,7 +2487,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const sucursal = opt.value;
         const sucursalGerenteEmail = (opt.getAttribute("data-gerente-email") || "").trim();
         const sucursalGerenteNombre = opt.getAttribute("data-gerente-nombre") || "";
-        const subManagerEmails = parseSubmanagerEmails(opt.getAttribute("data-subgerentes") || "");
+        let subManagers = [];
+        try {
+          const rawSub = opt.getAttribute("data-subgerentes") || "[]";
+          subManagers = parseSubmanagerEntries(JSON.parse(rawSub));
+        } catch (_) {
+          subManagers = parseSubmanagerEntries(opt.getAttribute("data-subgerentes") || "");
+        }
+        const subManagerEmails = getSubmanagerEmails(subManagers);
 
         const { firebaseKey, display, iso } = getArgentinaDateInfo();
 
@@ -2440,6 +2504,7 @@ document.addEventListener("DOMContentLoaded", () => {
           sucursal,
           sucursalGerenteNombre,
           sucursalGerenteEmail,
+          subManagers,
           subManagerEmails,
           cliente: clienteInput.value.trim().toUpperCase(),
           nroCliente: nroClienteInput.value.trim().toUpperCase(),
@@ -2519,9 +2584,10 @@ document.addEventListener("DOMContentLoaded", () => {
           const htmlSubgerente = buildTicketEmailHtml(commonEmailData, "gerente");
           for (let i = 0; i < ticketData.subManagerEmails.length; i++) {
             const subEmail = ticketData.subManagerEmails[i];
+            const subData = (ticketData.subManagers || []).find((s) => s.email === subEmail);
             addOverlayStep(`Enviando copia al subgerente (${subEmail})…`);
             const subResp = await sendEmailSnp({
-              toName: "Subgerente de sucursal",
+              toName: subData?.name || "Subgerente de sucursal",
               toEmail: subEmail,
               subject: subjectGerente,
               htmlBody: htmlSubgerente

@@ -504,7 +504,7 @@
               <input id="branch-name-input" class="form-control" type="text" placeholder="Sucursal (ej: Novogar Rosario Centro)" required />
               <input id="branch-manager-input" class="form-control" type="text" placeholder="Nombre de gerente" required />
               <input id="branch-email-input" class="form-control" type="email" placeholder="Email de gerente" required />
-              <input id="branch-submanagers-input" class="form-control" type="text" placeholder="Subgerentes (emails separados por coma) · opcional" />
+              <input id="branch-submanagers-input" class="form-control" type="text" placeholder="Subgerentes: Nombre <email>, Nombre2 <email2> (opcional)" />
               <button type="submit" class="btn btn-sm btn-primary-macos">
                 <i class="bi bi-plus-circle me-1"></i>
                 Guardar sucursal
@@ -512,6 +512,13 @@
             </div>
           </form>
 
+          <div class="branches-list-head">
+            <span>Sucursal</span>
+            <span>Gerente</span>
+            <span>Email gerente</span>
+            <span>Subgerentes (nombre + email)</span>
+            <span>Acciones</span>
+          </div>
           <div id="branches-list" class="branches-list"></div>
         </section>
 
@@ -547,6 +554,10 @@
                 <button type="button" id="charts-apply-btn" class="btn btn-sm btn-outline-primary-macos">
                   <i class="bi bi-funnel me-1"></i>
                   Aplicar filtros
+                </button>
+                <button type="button" id="charts-clear-btn" class="btn btn-sm btn-outline-secondary-macos ms-2">
+                  <i class="bi bi-x-circle me-1"></i>
+                  Limpiar filtros
                 </button>
               </div>
             </div>
