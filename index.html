@@ -504,6 +504,7 @@
               <input id="branch-name-input" class="form-control" type="text" placeholder="Sucursal (ej: Novogar Rosario Centro)" required />
               <input id="branch-manager-input" class="form-control" type="text" placeholder="Nombre de gerente" required />
               <input id="branch-email-input" class="form-control" type="email" placeholder="Email de gerente" required />
+              <input id="branch-submanagers-input" class="form-control" type="text" placeholder="Subgerentes (emails separados por coma) · opcional" />
               <button type="submit" class="btn btn-sm btn-primary-macos">
                 <i class="bi bi-plus-circle me-1"></i>
                 Guardar sucursal
@@ -529,27 +530,61 @@
 
           <div class="charts-filters mb-3">
             <div class="charts-filter-item">
-              <label for="charts-branch-filter" class="form-label mb-1">Sucursales (una o varias)</label>
-              <select id="charts-branch-filter" class="form-select" multiple size="8"></select>
+              <label for="charts-branch-toggle" class="form-label mb-1">Sucursales (una o varias)</label>
+              <button type="button" id="charts-branch-toggle" class="branch-picker-toggle">
+                <span id="charts-branch-toggle-text">Todas las sucursales</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <div id="charts-branch-panel" class="branch-picker-panel d-none">
+                <div id="charts-branch-options" class="branch-picker-options"></div>
+              </div>
+              <div id="charts-selected-chips" class="selected-chips mt-2"></div>
             </div>
             <div class="charts-filter-item">
               <label for="charts-date-range" class="form-label mb-1">Rango de fechas</label>
               <input id="charts-date-range" class="form-control" type="text" placeholder="Seleccioná un rango de fechas" />
-              <button type="button" id="charts-apply-btn" class="btn btn-sm btn-outline-primary-macos mt-2">
-                <i class="bi bi-funnel me-1"></i>
-                Aplicar filtros
-              </button>
+              <div class="charts-actions mt-2">
+                <button type="button" id="charts-apply-btn" class="btn btn-sm btn-outline-primary-macos">
+                  <i class="bi bi-funnel me-1"></i>
+                  Aplicar filtros
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-types-bar mb-3">
+            <div class="chart-type-item">
+              <label for="claims-chart-type" class="form-label mb-1">Tipo: Reclamos por sucursal</label>
+              <select id="claims-chart-type" class="form-select form-select-sm">
+                <option value="bar">Barras</option>
+                <option value="line">Líneas</option>
+                <option value="pie">Torta</option>
+                <option value="doughnut">Dona</option>
+              </select>
+            </div>
+            <div class="chart-type-item">
+              <label for="sku-chart-type" class="form-label mb-1">Tipo: Ranking de SKU</label>
+              <select id="sku-chart-type" class="form-select form-select-sm">
+                <option value="bar">Barras horizontales</option>
+                <option value="line">Líneas</option>
+                <option value="radar">Radar</option>
+                <option value="polarArea">Área polar</option>
+              </select>
             </div>
           </div>
 
           <div class="charts-grid">
             <div class="chart-card">
               <h3>Reclamos por sucursal</h3>
-              <canvas id="claims-by-branch-chart"></canvas>
+              <div class="chart-canvas-wrap">
+                <canvas id="claims-by-branch-chart"></canvas>
+              </div>
             </div>
             <div class="chart-card">
               <h3>Ranking de SKU</h3>
-              <canvas id="sku-ranking-chart"></canvas>
+              <div class="chart-canvas-wrap">
+                <canvas id="sku-ranking-chart"></canvas>
+              </div>
             </div>
           </div>
         </section>

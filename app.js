@@ -110,6 +110,15 @@ function toCapitalizedText(value) {
     .replace(/\b(\p{L})/gu, (m) => m.toLocaleUpperCase("es-AR"));
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const BRANCHES_STORAGE_KEY = "snp_custom_branches_v1";
 let branchesState = [];
 let editingBranchId = null;
@@ -119,6 +128,16 @@ let chartDateRange = { from: null, to: null };
 
 function createBranchId() {
   return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function parseSubmanagerEmails(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean);
+  }
+  return String(raw || "")
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 function getInitialBranchesFromSelect() {
@@ -131,7 +150,8 @@ function getInitialBranchesFromSelect() {
       id: createBranchId(),
       name: String(opt.value || "").trim(),
       managerName: String(opt.getAttribute("data-gerente-nombre") || "").trim(),
-      managerEmail: String(opt.getAttribute("data-gerente-email") || "").trim()
+      managerEmail: String(opt.getAttribute("data-gerente-email") || "").trim(),
+      subManagerEmails: []
     }));
 }
 
@@ -159,7 +179,9 @@ function loadBranches() {
 
 function renderBranchesInSelects() {
   const sucursalSelect = document.getElementById("sucursal");
-  const chartsFilter = document.getElementById("charts-branch-filter");
+  const chartsFilter = document.getElementById("charts-branch-options");
+  const chartsToggleText = document.getElementById("charts-branch-toggle-text");
+  const chartsSelectedChips = document.getElementById("charts-selected-chips");
 
   if (sucursalSelect) {
     const current = sucursalSelect.value;
@@ -171,6 +193,7 @@ function renderBranchesInSelects() {
       option.textContent = toCapitalizedText(branch.name);
       option.setAttribute("data-gerente-nombre", toCapitalizedText(branch.managerName));
       option.setAttribute("data-gerente-email", String(branch.managerEmail || "").trim().toLowerCase());
+      option.setAttribute("data-subgerentes", parseSubmanagerEmails(branch.subManagerEmails).join(","));
       sucursalSelect.appendChild(option);
     });
 
@@ -181,16 +204,38 @@ function renderBranchesInSelects() {
 
   if (chartsFilter) {
     const previouslySelected = new Set(
-      Array.from(chartsFilter.selectedOptions || []).map((o) => o.value)
+      Array.from(chartsFilter.querySelectorAll("input[type='checkbox']:checked")).map((i) => i.value)
     );
     chartsFilter.innerHTML = "";
     branchesState.forEach((branch) => {
-      const option = document.createElement("option");
-      option.value = branch.name;
-      option.textContent = toCapitalizedText(branch.name);
-      if (previouslySelected.has(branch.name)) option.selected = true;
+      const option = document.createElement("label");
+      option.className = "branch-picker-option";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = branch.name;
+      checkbox.checked = previouslySelected.has(branch.name);
+      const caption = document.createElement("span");
+      caption.textContent = toCapitalizedText(branch.name);
+      option.appendChild(checkbox);
+      option.appendChild(caption);
       chartsFilter.appendChild(option);
     });
+
+    const selectedNow = Array.from(
+      chartsFilter.querySelectorAll("input[type='checkbox']:checked")
+    ).map((i) => i.value);
+    if (chartsToggleText) {
+      chartsToggleText.textContent = selectedNow.length
+        ? `${selectedNow.length} sucursal(es) seleccionadas`
+        : "Todas las sucursales";
+    }
+    if (chartsSelectedChips) {
+      chartsSelectedChips.innerHTML = selectedNow.length
+        ? selectedNow
+            .map((name) => `<span class="selected-chip">${escapeHtml(toCapitalizedText(name))}</span>`)
+            .join("")
+        : '<span class="selected-chip muted">Sin filtro por sucursal</span>';
+    }
   }
 }
 
@@ -206,9 +251,10 @@ function renderBranchesAdmin() {
     card.dataset.id = branch.id;
     card.innerHTML = `
       <div class="branch-fields">
-        <input type="text" class="form-control capitalize-text" data-field="name" value="${toCapitalizedText(branch.name)}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" data-field="managerName" value="${toCapitalizedText(branch.managerName)}" ${editingBranchId === branch.id ? "" : "disabled"} />
-        <input type="text" class="form-control capitalize-text" data-field="managerEmail" value="${String(branch.managerEmail || "").trim().toLowerCase()}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="name" value="${escapeHtml(toCapitalizedText(branch.name))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="managerName" value="${escapeHtml(toCapitalizedText(branch.managerName))}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="managerEmail" value="${escapeHtml(String(branch.managerEmail || "").trim().toLowerCase())}" ${editingBranchId === branch.id ? "" : "disabled"} />
+        <input type="text" class="form-control capitalize-text" data-field="subManagerEmails" value="${escapeHtml(parseSubmanagerEmails(branch.subManagerEmails).join(", "))}" ${editingBranchId === branch.id ? "" : "disabled"} />
         <div class="d-flex gap-1">
           <button type="button" class="btn btn-sm btn-outline-secondary-macos" data-action="${editingBranchId === branch.id ? "save" : "edit"}">
             <i class="bi bi-${editingBranchId === branch.id ? "check2" : "pencil"}"></i>
@@ -227,16 +273,17 @@ function upsertBranch(payload) {
   const name = toCapitalizedText(payload.name);
   const managerName = toCapitalizedText(payload.managerName);
   const managerEmail = String(payload.managerEmail || "").trim().toLowerCase();
+  const subManagerEmails = parseSubmanagerEmails(payload.subManagerEmails);
   if (!name || !managerName || !managerEmail) {
     throw new Error("Completá nombre de sucursal, gerente y email.");
   }
 
   if (payload.id) {
     branchesState = branchesState.map((b) =>
-      b.id === payload.id ? { ...b, name, managerName, managerEmail } : b
+      b.id === payload.id ? { ...b, name, managerName, managerEmail, subManagerEmails } : b
     );
   } else {
-    branchesState.push({ id: createBranchId(), name, managerName, managerEmail });
+    branchesState.push({ id: createBranchId(), name, managerName, managerEmail, subManagerEmails });
   }
 
   branchesState.sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -245,11 +292,36 @@ function upsertBranch(payload) {
   renderBranchesAdmin();
 }
 
-function deleteBranch(branchId) {
+async function deleteBranch(branchId) {
+  if (!window.Swal) {
+    const confirmed = window.confirm("¿Eliminar sucursal?");
+    if (!confirmed) return false;
+    branchesState = branchesState.filter((b) => b.id !== branchId);
+    saveBranches();
+    renderBranchesInSelects();
+    renderBranchesAdmin();
+    return true;
+  }
+
+  const result = await Swal.fire({
+    title: "¿Eliminar sucursal?",
+    text: "Se quitará de todos los selectores y filtros.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sí, eliminar",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: "#ff3b30",
+    cancelButtonColor: "#8e8e93",
+    background: "#f7f7fc",
+    borderRadius: "18px"
+  });
+  if (!result.isConfirmed) return false;
+
   branchesState = branchesState.filter((b) => b.id !== branchId);
   saveBranches();
   renderBranchesInSelects();
   renderBranchesAdmin();
+  return true;
 }
 
 // =======================
@@ -1667,13 +1739,22 @@ function destroyChartsIfNeeded() {
   }
 }
 
+function getSelectedBranchesFromPicker() {
+  const container = document.getElementById("charts-branch-options");
+  if (!container) return [];
+  return Array.from(container.querySelectorAll("input[type='checkbox']:checked")).map(
+    (i) => i.value
+  );
+}
+
 async function renderChartsView() {
-  const branchSelect = document.getElementById("charts-branch-filter");
   const claimsCanvas = document.getElementById("claims-by-branch-chart");
   const skuCanvas = document.getElementById("sku-ranking-chart");
-  if (!branchSelect || !claimsCanvas || !skuCanvas || !window.Chart) return;
+  const claimsTypeSelect = document.getElementById("claims-chart-type");
+  const skuTypeSelect = document.getElementById("sku-chart-type");
+  if (!claimsCanvas || !skuCanvas || !window.Chart) return;
 
-  const selectedBranches = Array.from(branchSelect.selectedOptions).map((o) => o.value);
+  const selectedBranches = getSelectedBranchesFromPicker();
   const tickets = await fetchAllTickets();
   const filtered = tickets.filter((t) => ticketMatchesChartFilters(t, selectedBranches));
 
@@ -1698,8 +1779,11 @@ async function renderChartsView() {
 
   destroyChartsIfNeeded();
 
+  const claimsType = claimsTypeSelect?.value || "bar";
+  const skuType = skuTypeSelect?.value || "bar";
+
   claimsByBranchChart = new Chart(claimsCanvas, {
-    type: "bar",
+    type: claimsType,
     data: {
       labels: claimsRows.map(([name]) => toCapitalizedText(name)),
       datasets: [
@@ -1716,7 +1800,7 @@ async function renderChartsView() {
   });
 
   skuRankingChart = new Chart(skuCanvas, {
-    type: "bar",
+    type: skuType,
     data: {
       labels: skuRows.map(([sku]) => sku),
       datasets: [
@@ -1730,7 +1814,7 @@ async function renderChartsView() {
       ]
     },
     options: {
-      indexAxis: "y",
+      indexAxis: skuType === "bar" ? "y" : "x",
       responsive: true,
       maintainAspectRatio: false
     }
@@ -2057,7 +2141,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const branchesList = document.getElementById("branches-list");
   const chartsApplyBtn = document.getElementById("charts-apply-btn");
   const chartsDateRangeInput = document.getElementById("charts-date-range");
-  const chartsBranchFilter = document.getElementById("charts-branch-filter");
+  const chartsBranchOptions = document.getElementById("charts-branch-options");
+  const chartsBranchToggle = document.getElementById("charts-branch-toggle");
+  const chartsBranchPanel = document.getElementById("charts-branch-panel");
+  const claimsChartType = document.getElementById("claims-chart-type");
+  const skuChartType = document.getElementById("sku-chart-type");
 
   const printTicketBtn = document.getElementById("print-ticket-btn");
 
@@ -2111,6 +2199,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (chartsDateRangeInput && window.flatpickr) {
+    flatpickr(chartsDateRangeInput, {
+      mode: "range",
+      dateFormat: "Y-m-d",
+      locale: window.flatpickr?.l10ns?.es || "es",
+      onClose: (selectedDates) => {
+        const from = selectedDates[0] || null;
+        const toBase = selectedDates[1] || selectedDates[0] || null;
+        const to = toBase ? new Date(toBase) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+        chartDateRange = {
+          from,
+          to
+        };
+      }
+    });
+  }
+
   if (navNew) {
     navNew.addEventListener("click", () => setActiveView("form"));
   }
@@ -2134,8 +2240,31 @@ document.addEventListener("DOMContentLoaded", () => {
   if (chartsApplyBtn) {
     chartsApplyBtn.addEventListener("click", () => renderChartsView());
   }
-  if (chartsBranchFilter) {
-    chartsBranchFilter.addEventListener("change", () => renderChartsView());
+  if (chartsBranchOptions) {
+    chartsBranchOptions.addEventListener("change", () => {
+      renderBranchesInSelects();
+      renderChartsView();
+    });
+  }
+  if (chartsBranchToggle && chartsBranchPanel) {
+    chartsBranchToggle.addEventListener("click", () => {
+      chartsBranchPanel.classList.toggle("d-none");
+    });
+    document.addEventListener("click", (e) => {
+      if (
+        !chartsBranchPanel.classList.contains("d-none") &&
+        !chartsBranchPanel.contains(e.target) &&
+        !chartsBranchToggle.contains(e.target)
+      ) {
+        chartsBranchPanel.classList.add("d-none");
+      }
+    });
+  }
+  if (claimsChartType) {
+    claimsChartType.addEventListener("change", () => renderChartsView());
+  }
+  if (skuChartType) {
+    skuChartType.addEventListener("change", () => renderChartsView());
   }
 
   if (branchForm) {
@@ -2144,11 +2273,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const name = document.getElementById("branch-name-input")?.value || "";
       const managerName = document.getElementById("branch-manager-input")?.value || "";
       const managerEmail = document.getElementById("branch-email-input")?.value || "";
+      const subManagerEmails = document.getElementById("branch-submanagers-input")?.value || "";
 
       try {
-        upsertBranch({ name, managerName, managerEmail });
+        upsertBranch({ name, managerName, managerEmail, subManagerEmails });
         branchForm.reset();
         editingBranchId = null;
+        renderChartsView();
       } catch (err) {
         showSwalError("No se pudo guardar", err?.message || "Revisá los datos.");
       }
@@ -2170,16 +2301,18 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       if (action === "delete") {
-        deleteBranch(branchId);
-        renderChartsView();
+        deleteBranch(branchId).then((deleted) => {
+          if (deleted) renderChartsView();
+        });
         return;
       }
       if (action === "save") {
         const name = card.querySelector('[data-field="name"]')?.value || "";
         const managerName = card.querySelector('[data-field="managerName"]')?.value || "";
         const managerEmail = card.querySelector('[data-field="managerEmail"]')?.value || "";
+        const subManagerEmails = card.querySelector('[data-field="subManagerEmails"]')?.value || "";
         try {
-          upsertBranch({ id: branchId, name, managerName, managerEmail });
+          upsertBranch({ id: branchId, name, managerName, managerEmail, subManagerEmails });
           editingBranchId = null;
           renderChartsView();
         } catch (err) {
@@ -2297,6 +2430,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sucursal = opt.value;
         const sucursalGerenteEmail = (opt.getAttribute("data-gerente-email") || "").trim();
         const sucursalGerenteNombre = opt.getAttribute("data-gerente-nombre") || "";
+        const subManagerEmails = parseSubmanagerEmails(opt.getAttribute("data-subgerentes") || "");
 
         const { firebaseKey, display, iso } = getArgentinaDateInfo();
 
@@ -2306,6 +2440,7 @@ document.addEventListener("DOMContentLoaded", () => {
           sucursal,
           sucursalGerenteNombre,
           sucursalGerenteEmail,
+          subManagerEmails,
           cliente: clienteInput.value.trim().toUpperCase(),
           nroCliente: nroClienteInput.value.trim().toUpperCase(),
           direccion: direccionInput.value.trim().toUpperCase(),
@@ -2377,6 +2512,26 @@ document.addEventListener("DOMContentLoaded", () => {
             addOverlayStep("✔ Copia enviada al gerente.", "ok");
           } else {
             addOverlayStep("No se pudo enviar la copia al gerente.", "error");
+          }
+        }
+
+        if (Array.isArray(ticketData.subManagerEmails) && ticketData.subManagerEmails.length) {
+          const htmlSubgerente = buildTicketEmailHtml(commonEmailData, "gerente");
+          for (let i = 0; i < ticketData.subManagerEmails.length; i++) {
+            const subEmail = ticketData.subManagerEmails[i];
+            addOverlayStep(`Enviando copia al subgerente (${subEmail})…`);
+            const subResp = await sendEmailSnp({
+              toName: "Subgerente de sucursal",
+              toEmail: subEmail,
+              subject: subjectGerente,
+              htmlBody: htmlSubgerente
+            });
+            addOverlayStep(
+              subResp.ok
+                ? `✔ Copia enviada a subgerente (${subEmail}).`
+                : `No se pudo enviar copia a subgerente (${subEmail}).`,
+              subResp.ok ? "ok" : "error"
+            );
           }
         }
 
