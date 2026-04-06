@@ -131,6 +131,7 @@ let skuRankingChart = null;
 let claimsTrendChart = null;
 let chartDateRange = { from: null, to: null };
 let chartsDatePicker = null;
+let branchSearchTerm = "";
 
 function createBranchId() {
   return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -328,7 +329,20 @@ function renderBranchesAdmin() {
 
   list.innerHTML = "";
 
-  branchesState.forEach((branch) => {
+  const visibleBranches = branchesState.filter((branch) => {
+    const haystack = [
+      branch.name,
+      branch.managerName,
+      branch.managerEmail,
+      submanagerNamesToDisplay(branch.subManagers || []),
+      submanagerEmailsToDisplay(branch.subManagers || [])
+    ]
+      .join(" ")
+      .toLowerCase();
+    return !branchSearchTerm || haystack.includes(branchSearchTerm);
+  });
+
+  visibleBranches.forEach((branch) => {
     const card = document.createElement("article");
     card.className = "branch-card";
     card.dataset.id = branch.id;
@@ -389,8 +403,6 @@ function upsertBranch(payload) {
   } else {
     branchesState.push({ id: createBranchId(), name, managerName, managerEmail, subManagers });
   }
-
-  branchesState.sort((a, b) => a.name.localeCompare(b.name, "es"));
   saveBranches();
   renderBranchesInSelects();
   renderBranchesAdmin();
@@ -2003,21 +2015,28 @@ async function renderChartsView() {
   const skuColors = skuRows.map((_, idx) => colorFromIndex(idx + 9));
   const skuBorderColors = skuRows.map((_, idx) => borderColorFromIndex(idx + 9));
   const totalClaims = filtered.length;
-  const branchWithMostClaims = claimsRows[0] || ["Sin datos", 0];
+  const topBranches = claimsRows.slice(0, 3);
 
   if (chartsSummary) {
     chartsSummary.innerHTML = `
-      <article class="summary-card"><i class="bi bi-megaphone-fill"></i><span>Total reclamos</span><strong>${totalClaims}</strong></article>
-      <article class="summary-card"><i class="bi bi-buildings-fill"></i><span>Sucursales con reclamos</span><strong>${claimsRows.length}</strong></article>
-      <article class="summary-card"><i class="bi bi-box-seam"></i><span>SKU distintos</span><strong>${skuMap.size}</strong></article>
+      <article class="summary-card summary-card-compact"><i class="bi bi-megaphone-fill"></i><span>Total reclamos</span><strong>${totalClaims}</strong></article>
+      <article class="summary-card summary-card-compact"><i class="bi bi-buildings-fill"></i><span>Sucursales con reclamos</span><strong>${claimsRows.length}</strong></article>
+      <article class="summary-card summary-card-compact"><i class="bi bi-box-seam"></i><span>SKU distintos</span><strong>${skuMap.size}</strong></article>
       <article class="summary-card summary-card-highlight">
         <span class="summary-highlight-icon"><i class="bi bi-trophy-fill"></i></span>
-        <span>Mayor volumen</span>
-        <strong class="summary-highlight-branch" title="${escapeHtml(branchWithMostClaims[0])}">${escapeHtml(branchWithMostClaims[0])}</strong>
-        <div class="summary-highlight-count">
-          <b>${branchWithMostClaims[1]}</b>
-          <small>reclamo(s)</small>
-        </div>
+        <span>Top sucursales por volumen</span>
+        <ol class="summary-top3-list">
+          ${topBranches
+            .map(
+              ([name, count], idx) => `
+              <li>
+                <i class="bi bi-trophy-fill rank-trophy rank-${idx + 1}"></i>
+                <span class="summary-highlight-branch" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                <strong>${count}</strong>
+              </li>`
+            )
+            .join("") || '<li><span class="summary-highlight-branch">Sin datos</span></li>'}
+        </ol>
       </article>
     `;
   }
@@ -2411,6 +2430,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const refreshHistoryBtn = document.getElementById("refresh-history-btn");
   const branchForm = document.getElementById("branch-form");
   const branchesList = document.getElementById("branches-list");
+  const branchSearchInput = document.getElementById("branch-search-input");
   const chartsApplyBtn = document.getElementById("charts-apply-btn");
   const chartsClearBtn = document.getElementById("charts-clear-btn");
   const chartsDateRangeInput = document.getElementById("charts-date-range");
@@ -2545,6 +2565,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (branchForm) {
     branchForm.addEventListener("submit", (e) => {
       e.preventDefault();
+      const submitBtn = branchForm.querySelector('button[type="submit"]');
       const name = document.getElementById("branch-name-input")?.value || "";
       const managerName = document.getElementById("branch-manager-input")?.value || "";
       const managerEmail = document.getElementById("branch-email-input")?.value || "";
@@ -2558,6 +2579,11 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       try {
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.dataset.original = submitBtn.innerHTML;
+          submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+        }
         upsertBranch({ name, managerName, managerEmail, subManagers });
         branchForm.reset();
         editingBranchId = null;
@@ -2565,7 +2591,19 @@ document.addEventListener("DOMContentLoaded", () => {
         renderChartsView();
       } catch (err) {
         showSwalError("No se pudo guardar", err?.message || "Revisá los datos.");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = submitBtn.dataset.original || submitBtn.innerHTML;
+        }
       }
+    });
+  }
+
+  if (branchSearchInput) {
+    branchSearchInput.addEventListener("input", (e) => {
+      branchSearchTerm = String(e.target.value || "").trim().toLowerCase();
+      renderBranchesAdmin();
     });
   }
 
@@ -2590,6 +2628,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       if (action === "save") {
+        actionBtn.disabled = true;
+        const original = actionBtn.innerHTML;
+        actionBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
         const name = card.querySelector('[data-field="name"]')?.value || "";
         const managerName = card.querySelector('[data-field="managerName"]')?.value || "";
         const managerEmail = card.querySelector('[data-field="managerEmail"]')?.value || "";
@@ -2607,6 +2648,9 @@ document.addEventListener("DOMContentLoaded", () => {
           renderChartsView();
         } catch (err) {
           showSwalError("No se pudo actualizar", err?.message || "Revisá los datos.");
+        } finally {
+          actionBtn.disabled = false;
+          actionBtn.innerHTML = original;
         }
       }
     });
