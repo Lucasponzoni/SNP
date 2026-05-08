@@ -108,10 +108,12 @@ function showSwalError(title, text) {
 }
 
 function toCapitalizedText(value) {
+  // Mayuscula al inicio de cada palabra. Usamos lookbehind Unicode-aware
+  // porque \b en JS sigue siendo ASCII y rompe con acentos (ej: ARIJÓN -> ArijÓN).
   return String(value || "")
     .trim()
     .toLocaleLowerCase("es-AR")
-    .replace(/\b(\p{L})/gu, (m) => m.toLocaleUpperCase("es-AR"));
+    .replace(/(?<=^|[^\p{L}\p{N}])\p{L}/gu, (m) => m.toLocaleUpperCase("es-AR"));
 }
 
 function escapeHtml(value) {
@@ -232,6 +234,26 @@ function buildSubmanagerEntriesFromSeparatedInputs(namesRaw, emailsRaw) {
 
 function getSubmanagerEmails(entries) {
   return parseSubmanagerEntries(entries).map((entry) => entry.email);
+}
+
+/**
+ * Busca una sucursal en branchesState por nombre, ignorando mayúsculas,
+ * acentos y espacios extra. Es la fuente de verdad para los datos del
+ * gerente / subgerentes; los <option> son solo UI y pueden desincronizarse.
+ */
+function normalizeBranchKey(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function findBranchByName(name) {
+  if (!name) return null;
+  const key = normalizeBranchKey(name);
+  return branchesState.find((b) => normalizeBranchKey(b.name) === key) || null;
 }
 
 function getInitialBranchesFromSelect() {
@@ -3036,16 +3058,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const opt = sucursalSelect.options[sucursalSelect.selectedIndex];
         const sucursal = opt.value;
-        const sucursalGerenteEmail = (opt.getAttribute("data-gerente-email") || "").trim();
-        const sucursalGerenteNombre = opt.getAttribute("data-gerente-nombre") || "";
+
+        // Fuente de verdad: branchesState. Los <option> son solo UI y pueden
+        // quedar desincronizados (timing, opciones del HTML inicial, etc).
+        // Buscamos la sucursal en el estado y, como último recurso, leemos
+        // los data-attributes del <option>.
+        const branchRecord = findBranchByName(sucursal);
+
+        const sucursalGerenteEmail = branchRecord
+          ? String(branchRecord.managerEmail || "").trim().toLowerCase()
+          : (opt.getAttribute("data-gerente-email") || "").trim().toLowerCase();
+
+        const sucursalGerenteNombre = branchRecord
+          ? toCapitalizedText(branchRecord.managerName || "")
+          : (opt.getAttribute("data-gerente-nombre") || "");
+
         let subManagers = [];
-        try {
-          const rawSub = opt.getAttribute("data-subgerentes") || "[]";
-          subManagers = parseSubmanagerEntries(JSON.parse(rawSub));
-        } catch (_) {
-          subManagers = parseSubmanagerEntries(opt.getAttribute("data-subgerentes") || "");
+        if (branchRecord) {
+          subManagers = parseSubmanagerEntries(branchRecord.subManagers || []);
+        } else {
+          try {
+            const rawSub = opt.getAttribute("data-subgerentes") || "[]";
+            subManagers = parseSubmanagerEntries(JSON.parse(rawSub));
+          } catch (_) {
+            subManagers = parseSubmanagerEntries(opt.getAttribute("data-subgerentes") || "");
+          }
         }
         const subManagerEmails = getSubmanagerEmails(subManagers);
+
+        if (!branchRecord) {
+          console.warn(
+            `[SNP] Sucursal "${sucursal}" no se encontró en branchesState; ` +
+            `se usaron data-attributes del <option> como respaldo.`
+          );
+        }
+        if (!sucursalGerenteEmail) {
+          console.warn(`[SNP] Sucursal "${sucursal}" sin email de gerente cargado.`);
+        }
 
         const { firebaseKey, display, iso } = getArgentinaDateInfo();
 
