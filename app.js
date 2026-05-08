@@ -303,8 +303,6 @@ async function loadBranches() {
 function renderBranchesInSelects() {
   const sucursalSelect = document.getElementById("sucursal");
   const chartsFilter = document.getElementById("charts-branch-options");
-  const chartsToggleText = document.getElementById("charts-branch-toggle-text");
-  const chartsSelectedChips = document.getElementById("charts-selected-chips");
 
   if (sucursalSelect) {
     const current = sucursalSelect.value;
@@ -343,22 +341,32 @@ function renderBranchesInSelects() {
       option.appendChild(caption);
       chartsFilter.appendChild(option);
     });
+  }
 
-    const selectedNow = Array.from(
-      chartsFilter.querySelectorAll("input[type='checkbox']:checked")
-    ).map((i) => i.value);
-    if (chartsToggleText) {
-      chartsToggleText.textContent = selectedNow.length
-        ? `${selectedNow.length} sucursal(es) seleccionadas`
-        : "Todas las sucursales";
-    }
-    if (chartsSelectedChips) {
-      chartsSelectedChips.innerHTML = selectedNow.length
-        ? selectedNow
-            .map((name) => `<span class="selected-chip">${escapeHtml(toCapitalizedText(name))}</span>`)
-            .join("")
-        : '<span class="selected-chip muted">Sin filtro por sucursal</span>';
-    }
+  updateChartsBranchSelectionUi();
+}
+
+function updateChartsBranchSelectionUi() {
+  const chartsFilter = document.getElementById("charts-branch-options");
+  const chartsToggleText = document.getElementById("charts-branch-toggle-text");
+  const chartsSelectedChips = document.getElementById("charts-selected-chips");
+  if (!chartsFilter) return;
+
+  const selectedNow = Array.from(
+    chartsFilter.querySelectorAll("input[type='checkbox']:checked")
+  ).map((i) => i.value);
+
+  if (chartsToggleText) {
+    chartsToggleText.textContent = selectedNow.length
+      ? `${selectedNow.length} sucursal(es) seleccionadas`
+      : "Todas las sucursales";
+  }
+  if (chartsSelectedChips) {
+    chartsSelectedChips.innerHTML = selectedNow.length
+      ? selectedNow
+          .map((name) => `<span class="selected-chip">${escapeHtml(toCapitalizedText(name))}</span>`)
+          .join("")
+      : '<span class="selected-chip muted">Sin filtro por sucursal</span>';
   }
 }
 
@@ -2151,6 +2159,217 @@ async function renderChartsView() {
   });
 }
 
+// =======================
+// Exportar Excel (ExcelJS)
+// =======================
+function buildExcelBranchPalette(branches) {
+  const palette = [
+    "FFE3F2FD", "FFFFF3E0", "FFE8F5E9", "FFFCE4EC", "FFEDE7F6",
+    "FFFFF8E1", "FFE0F7FA", "FFF3E5F5", "FFE1F5FE", "FFFBE9E7",
+    "FFE0F2F1", "FFF1F8E9", "FFFFEBEE", "FFE8EAF6", "FFF9FBE7",
+    "FFEFEBE9"
+  ];
+  const map = new Map();
+  branches.forEach((name, idx) => {
+    map.set(name, palette[idx % palette.length]);
+  });
+  return map;
+}
+
+function formatTicketDateForExcel(ticket) {
+  if (ticket?.createdAtDisplay) return ticket.createdAtDisplay;
+  if (ticket?.createdAtIso) {
+    const d = new Date(ticket.createdAtIso);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString("es-AR", { timeZone: "America/Argentina/Cordoba" });
+    }
+  }
+  return "";
+}
+
+function setExportBtnLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.classList.add("loading");
+  } else {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+  }
+}
+
+async function handleExportChartsExcel() {
+  const btn = document.getElementById("charts-export-excel-btn");
+
+  if (typeof window.ExcelJS === "undefined") {
+    showSwalError("ExcelJS no disponible", "No se pudo cargar la librería de exportación. Revisá la conexión y reintentá.");
+    return;
+  }
+
+  setExportBtnLoading(btn, true);
+
+  try {
+    const tickets = await fetchAllTickets();
+    const selectedBranches = getSelectedBranchesFromPicker();
+    const filtered = tickets
+      .filter((t) => ticketMatchesChartFilters(t, selectedBranches))
+      .sort((a, b) => {
+        const aTime = a.createdAtIso ? new Date(a.createdAtIso).getTime() : 0;
+        const bTime = b.createdAtIso ? new Date(b.createdAtIso).getTime() : 0;
+        return bTime - aTime;
+      });
+
+    if (!filtered.length) {
+      showSwalError("Sin datos", "No hay tickets para exportar con los filtros actuales.");
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Tickets SNP · Novogar";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet("Tickets SNP", {
+      views: [{ state: "frozen", ySplit: 1 }]
+    });
+
+    const columns = [
+      { header: "N° Ticket",       key: "ticketNumber", width: 12 },
+      { header: "Fecha de carga",  key: "fecha",        width: 22 },
+      { header: "Sucursal",        key: "sucursal",     width: 32 },
+      { header: "Gerente",         key: "gerente",      width: 22 },
+      { header: "Email gerente",   key: "gerenteEmail", width: 30 },
+      { header: "Cliente",         key: "cliente",      width: 28 },
+      { header: "N° cliente",      key: "nroCliente",   width: 14 },
+      { header: "Dirección",       key: "direccion",    width: 30 },
+      { header: "Ciudad",          key: "ciudad",       width: 30 },
+      { header: "Teléfono",        key: "telefono",     width: 16 },
+      { header: "Productos (SKU)", key: "producto",     width: 36 },
+      { header: "Falla",           key: "falla",        width: 36 },
+      { header: "Fecha de compra", key: "fechaCompra",  width: 16 },
+      { header: "Estado",          key: "status",       width: 14 }
+    ];
+    sheet.columns = columns;
+
+    // Header row: black background, white bold text
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF000000" } };
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      cell.border = {
+        top:    { style: "thin", color: { argb: "FF000000" } },
+        bottom: { style: "thin", color: { argb: "FF000000" } },
+        left:   { style: "thin", color: { argb: "FFFFFFFF" } },
+        right:  { style: "thin", color: { argb: "FFFFFFFF" } }
+      };
+    });
+
+    const uniqueBranches = Array.from(new Set(filtered.map((t) => t.sucursal || "Sin sucursal")));
+    const branchColorMap = buildExcelBranchPalette(uniqueBranches);
+
+    const statusColors = {
+      nuevo:      { bg: "FFFFF59D", fg: "FF6B5E00" },
+      enviado:    { bg: "FFB3E5FC", fg: "FF01579B" },
+      pendiente:  { bg: "FFFFE0B2", fg: "FF7A4F00" },
+      resuelto:   { bg: "FFC8E6C9", fg: "FF1B5E20" },
+      cerrado:    { bg: "FFCFD8DC", fg: "FF263238" },
+      cancelado:  { bg: "FFFFCDD2", fg: "FFB71C1C" }
+    };
+
+    filtered.forEach((t, idx) => {
+      const rowIdx = idx + 2;
+      const row = sheet.addRow({
+        ticketNumber: t.ticketNumber ? `#${String(t.ticketNumber).padStart(5, "0")}` : "",
+        fecha:        formatTicketDateForExcel(t),
+        sucursal:     toCapitalizedText(t.sucursal || ""),
+        gerente:      toCapitalizedText(t.sucursalGerenteNombre || ""),
+        gerenteEmail: String(t.sucursalGerenteEmail || "").toLowerCase(),
+        cliente:      t.cliente || "",
+        nroCliente:   t.nroCliente || "",
+        direccion:    t.direccion || "",
+        ciudad:       t.ciudad || "",
+        telefono:     t.telefono || "",
+        producto:     t.producto || "",
+        falla:        t.falla || "",
+        fechaCompra:  t.fechaCompra || "",
+        status:       (t.status || "nuevo").toString()
+      });
+
+      // Zebra rows + per-cell styling
+      const zebra = idx % 2 === 0 ? "FFFFFFFF" : "FFF7F9FC";
+      row.height = 22;
+      row.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: zebra } };
+        cell.font = { name: "Calibri", size: 10, color: { argb: "FF1F2937" } };
+        cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+        cell.border = {
+          top:    { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left:   { style: "thin", color: { argb: "FFE5E7EB" } },
+          right:  { style: "thin", color: { argb: "FFE5E7EB" } }
+        };
+      });
+
+      // N° Ticket — pill style
+      const numCell = sheet.getCell(rowIdx, 1);
+      numCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+      numCell.font = { name: "Calibri", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+      numCell.alignment = { vertical: "middle", horizontal: "center" };
+
+      // Sucursal — color por sucursal
+      const branchKey = t.sucursal || "Sin sucursal";
+      const branchBg = branchColorMap.get(branchKey) || "FFE5E7EB";
+      const branchCell = sheet.getCell(rowIdx, 3);
+      branchCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: branchBg } };
+      branchCell.font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF1F2937" } };
+
+      // Email gerente — color azul tipo link
+      const emailCell = sheet.getCell(rowIdx, 5);
+      emailCell.font = { name: "Calibri", size: 10, color: { argb: "FF1D4ED8" }, underline: true };
+
+      // Estado — pill con color según valor
+      const statusKey = String(t.status || "nuevo").toLowerCase();
+      const statusStyle = statusColors[statusKey] || { bg: "FFE5E7EB", fg: "FF374151" };
+      const statusCell = sheet.getCell(rowIdx, 14);
+      statusCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: statusStyle.bg } };
+      statusCell.font = { name: "Calibri", size: 10, bold: true, color: { argb: statusStyle.fg } };
+      statusCell.alignment = { vertical: "middle", horizontal: "center" };
+      statusCell.value = (statusCell.value || "").toString().toUpperCase();
+    });
+
+    // AutoFilter sobre todas las columnas
+    const lastCol = String.fromCharCode("A".charCodeAt(0) + columns.length - 1);
+    const lastRow = filtered.length + 1;
+    sheet.autoFilter = `A1:${lastCol}${lastRow}`;
+
+    const buf = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fileName = `tickets-snp-${stamp}.xlsx`;
+    if (typeof window.saveAs === "function") {
+      window.saveAs(blob, fileName);
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+  } catch (err) {
+    console.error("Error exportando Excel:", err);
+    showSwalError("Error al exportar", err?.message || "No se pudo generar el archivo Excel.");
+  } finally {
+    setExportBtnLoading(btn, false);
+  }
+}
+
 async function handleReprintTicket(firebaseKey) {
   try {
     const tickets = await fetchAllTickets();
@@ -2558,6 +2777,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (chartsApplyBtn) {
     chartsApplyBtn.addEventListener("click", () => renderChartsView());
   }
+
+  const chartsExportExcelBtn = document.getElementById("charts-export-excel-btn");
+  if (chartsExportExcelBtn) {
+    chartsExportExcelBtn.addEventListener("click", () => handleExportChartsExcel());
+  }
   if (chartsClearBtn) {
     chartsClearBtn.addEventListener("click", () => {
       chartDateRange = getDefaultChartRange(90);
@@ -2567,14 +2791,18 @@ document.addEventListener("DOMContentLoaded", async () => {
           .querySelectorAll("input[type='checkbox']")
           .forEach((i) => (i.checked = false));
       }
-      renderBranchesInSelects();
+      updateChartsBranchSelectionUi();
       renderChartsView();
     });
   }
   if (chartsBranchOptions) {
     chartsBranchOptions.addEventListener("change", () => {
-      renderBranchesInSelects();
+      updateChartsBranchSelectionUi();
       renderChartsView();
+    });
+    // Evitamos que el click en checkboxes/labels burbujee al document y cierre el panel
+    chartsBranchOptions.addEventListener("click", (e) => {
+      e.stopPropagation();
     });
   }
   if (chartsBranchToggle && chartsBranchPanel) {

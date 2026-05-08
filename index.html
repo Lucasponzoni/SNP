@@ -5,8 +5,10 @@
   <title>Tickets SNP · Novogar</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- FAVICON (cambiá la ruta por tu ico real) -->
-  <link rel="icon" href="favicon.ico" type="image/x-icon" />
+  <!-- FAVICON -->
+  <link rel="icon" href="img/Novogar.png" type="image/png" />
+  <link rel="shortcut icon" href="img/Novogar.png" type="image/png" />
+  <link rel="apple-touch-icon" href="img/Novogar.png" />
 
   <!-- Bootstrap + Bootstrap Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -568,6 +570,15 @@
                   <i class="bi bi-x-circle me-1"></i>
                   Limpiar filtros
                 </button>
+                <button type="button" id="charts-export-excel-btn" class="btn btn-sm btn-primary-macos charts-export-btn ms-2">
+                  <span class="btn-content">
+                    <span class="btn-label">
+                      <i class="bi bi-file-earmark-excel me-1"></i>
+                      Exportar Excel
+                    </span>
+                    <span class="btn-spinner" aria-hidden="true"></span>
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -675,6 +686,11 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
   <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+
+  <!-- ExcelJS para exportar reportes con estilos -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
+  <!-- FileSaver para descarga de blobs -->
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js" defer></script>
 
   <script src="ciudades.js" defer></script>
 

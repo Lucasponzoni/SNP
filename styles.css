@@ -894,6 +894,53 @@ body::after {
 .charts-actions {
   display: flex;
   justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.charts-export-btn {
+  font-size: 12px;
+  padding: 4px 14px;
+  min-height: 30px;
+  box-shadow: 0 8px 18px rgba(16, 122, 78, 0.28);
+  background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.charts-export-btn:hover {
+  filter: brightness(1.05);
+}
+
+.charts-export-btn .btn-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.charts-export-btn .btn-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  animation: spin 650ms linear infinite;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+
+.charts-export-btn.loading .btn-spinner {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.charts-export-btn.loading .btn-label {
+  opacity: 0.85;
+}
+
+.charts-export-btn:disabled {
+  opacity: 0.7;
+  cursor: progress;
 }
 
 .branch-picker-toggle {
